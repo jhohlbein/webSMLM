@@ -77,13 +77,18 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
 
 ## Distribution & citation
 
-This project is designed to be distributed as a single file. To publish:
+This project is distributed as a single file. It lives at
+[github.com/HohlbeinLab/webSMLM](https://github.com/HohlbeinLab/webSMLM), is
+served via **GitHub Pages** at <https://hohlbeinlab.github.io/webSMLM/>, and is
+archived on **Zenodo** with a citable DOI ([10.5281/zenodo.21445041](https://doi.org/10.5281/zenodo.21445041)).
 
-1. Push this repository to GitHub.
-2. Enable **GitHub Pages** (Settings → Pages → deploy from branch) to serve
-   `webSMLM.html` at a public URL.
-3. Optionally connect the repo to **Zenodo** and cut a release to mint a citable
-   **DOI** for the software (see `CITATION.cff`).
+To cite webSMLM, use the concept DOI above (it always resolves to the latest
+version) or the metadata in [`CITATION.cff`](CITATION.cff) — GitHub's *Cite this
+repository* button reads it automatically. Please also cite the phasor SMLM
+paper it implements (Martens et al., 2018; see below).
+
+Each new **GitHub release** is picked up by Zenodo automatically and gets its own
+version DOI; pushing to `main` redeploys the Pages site.
 
 ## License
 
