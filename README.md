@@ -1,0 +1,95 @@
+# webSMLM
+
+A browser-based tool for **single-molecule localization microscopy (SMLM)**. It loads a
+raw image stack, detects and localizes single emitters, and reconstructs a
+super-resolution image — entirely in the browser. Nothing is uploaded; all
+computation runs client-side.
+
+> Status: proof-of-concept. Not a validated replacement for established SMLM
+> packages, but a fast, zero-install way to try localization on your own data.
+
+[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+
+## Quick start
+
+**Option A — just run it.** Download `webSMLM.html` and open it in any modern
+browser (double-click works; no internet, no install, no server). Everything
+needed is inside that one file.
+
+**Option B — hosted.** If served via GitHub Pages, open the published URL.
+
+Then: click **Generate synthetic stack** to try it immediately, or load your own
+`.tif`/`.tiff` stack. Set the **pixel size (nm)** first, pick a **fit method**,
+and press **Run localization**. Open **Help & guide** in the app for a full
+walk-through of every step.
+
+## What it does
+
+- **Loads** multi-frame TIFF stacks (8/16/32-bit, little- or big-endian,
+  uncompressed or deflate/LZW-compressed). 16-bit depth is preserved.
+- **Memory-aware loading**: caches frames in RAM within a configurable budget,
+  or streams large stacks in bounded heaps (the pattern that also enables
+  real-time processing of a live camera buffer). Falls back to streaming
+  automatically if an in-memory load hits the browser's memory ceiling.
+- **Detects** ROIs with a Difference-of-Gaussians band-pass filter and a
+  `mean + k·σ` threshold on the filtered image.
+- **Localizes** with either **phasor** fitting (very fast, no iteration) or a
+  **least-squares 2D Gaussian** fit.
+- **Renders** a super-resolution image with adjustable magnification and blur
+  (re-renders instantly without refitting), plus zoom, pan, and a scale bar.
+
+## Data & privacy
+
+The application is a single static HTML file. Your image data is read locally by
+the browser and never leaves your machine — there is no server and no upload.
+
+## How it works & references
+
+The in-app **Help & guide** documents each stage and lists references. Key ones:
+
+- **Phasor localization** (the fast fitter here implements this):
+  K. J. A. Martens, A. N. Bader, S. Baas, B. Rieger, J. Hohlbein,
+  *Phasor based single-molecule localization microscopy in 3D (pSMLM-3D)*,
+  J. Chem. Phys. **148**, 123311 (2018). https://doi.org/10.1063/1.5005899
+- **Detection & thresholding** (DoG band-pass + std-based threshold, after
+  ThunderSTORM): M. Ovesný et al., *Bioinformatics* **30**(16), 2389–2390 (2014).
+  https://doi.org/10.1093/bioinformatics/btu202
+- **LS vs MLE fitting**: K. I. Mortensen et al., *Nat. Methods* **7**, 377–381
+  (2010). https://doi.org/10.1038/nmeth.1447 — and localization-precision
+  theory: R. E. Thompson, D. R. Larson, W. W. Webb, *Biophys. J.* **82**,
+  2775–2783 (2002). https://doi.org/10.1016/S0006-3495(02)75618-X
+- **Overview**: M. Lelek et al., *Nat. Rev. Methods Primers* **1**, 39 (2021).
+  https://doi.org/10.1038/s43586-021-00038-x
+
+## Known limitations
+
+- 2D only; the Gaussian fit is **least-squares, not Poisson MLE**.
+- The `mean + k·σ` threshold assumes roughly stationary noise; strong background
+  gradients favour a local threshold.
+- Precision figures shown in the app are for the built-in synthetic model.
+
+## Roadmap ideas
+
+- Web Worker pool / WebGPU to remove the band-pass bottleneck on large stacks
+- Poisson MLE fitting; 3D (astigmatism) via the phasor magnitude ratio
+- Drift correction, localization filtering, and export (CSV of localizations)
+
+## Distribution & citation
+
+This project is designed to be distributed as a single file. To publish:
+
+1. Push this repository to GitHub.
+2. Enable **GitHub Pages** (Settings → Pages → deploy from branch) to serve
+   `webSMLM.html` at a public URL.
+3. Optionally connect the repo to **Zenodo** and cut a release to mint a citable
+   **DOI** for the software (see `CITATION.cff`).
+
+## License
+
+© 2026 **Johannes Hohlbein**, licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — see [`LICENSE`](LICENSE).
+You may share and adapt this work, including commercially, with attribution.
+
+Bundled third-party decoders retain their own MIT licenses:
+[UTIF.js](https://github.com/photopea/UTIF.js) and
+[pako](https://github.com/nodeca/pako).

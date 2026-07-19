@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata, and cite the phasor SMLM paper it implements."
+title: "webSMLM: a browser-based single-molecule localization microscopy tool"
+type: software
+authors:
+  - family-names: Hohlbein
+    given-names: Johannes
+version: 0.1.0
+date-released: "2026-07-19"
+license: CC-BY-4.0
+# repository-code: "https://github.com/<your-username>/webSMLM"   # fill in after pushing
+# url: "https://<your-username>.github.io/webSMLM/"                # GitHub Pages URL
+keywords:
+  - single-molecule localization microscopy
+  - SMLM
+  - super-resolution
+  - phasor
+  - fluorescence microscopy
+references:
+  - type: article
+    title: "Phasor based single-molecule localization microscopy in 3D (pSMLM-3D): an algorithm for MHz localization rates using standard CPUs"
+    authors:
+      - family-names: Martens
+        given-names: Koen J. A.
+      - family-names: Bader
+        given-names: Arjen N.
+      - family-names: Baas
+        given-names: Sander
+      - family-names: Rieger
+        given-names: Bernd
+      - family-names: Hohlbein
+        given-names: Johannes
+    journal: "The Journal of Chemical Physics"
+    volume: 148
+    issue: 12
+    start: 123311
+    year: 2018
+    doi: "10.1063/1.5005899"
