@@ -1301,7 +1301,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.3.0-dev · build 2026-07-20b · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.3.0-dev · build 2026-07-20c · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1431,7 +1431,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.3.0-dev · build 2026-07-20b
+      <div class="log" id="log">webSMLM v0.3.0-dev · build 2026-07-20c
 [features: worker pool · contiguous ImageJ stacks · CSV export]
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
@@ -1569,12 +1569,21 @@ async function loadTiff(fileBuf, fileSize){
     const bps=(ifds[0].t258&&ifds[0].t258[0])||8, spp=(ifds[0].t277&&ifds[0].t277[0])||1;
     const rawBytes=w*h*(bps>>3)*spp, base=(ifds[0].t273&&ifds[0].t273[0])||0;
     const cmpr=(ifds[0].t259&&ifds[0].t259[0])||1;
-    const fits=base+declared*rawBytes<=fileBuf.byteLength;
+    // How many frames the buffer we actually received can serve. If the browser
+    // could not hand us the whole file (engines cap ArrayBuffer size), this is
+    // less than `declared` — process what we have rather than falling back to
+    // the single indexed IFD.
+    const avail=rawBytes>0?Math.max(0,Math.floor((fileBuf.byteLength-base)/rawBytes)):0;
+    const usable=Math.min(declared,avail);
     log(`Contiguous stack: description declares ${declared} frames, ${n} IFD${n===1?'':'s'} present.`);
-    if(cmpr===1 && rawBytes>0 && fits){
+    if(fileBuf.byteLength<fileSize){
+      log(`  ⚠ Only ${fmtBytes(fileBuf.byteLength)} of the ${fmtBytes(fileSize)} file reached memory`);
+      log(`     (JS ArrayBuffer size limit) — ${usable} of ${declared} frames are reachable.`);
+    }
+    if(cmpr===1 && rawBytes>0 && usable>1){
       const isLE=new DataView(fileBuf,0,2).getUint16(0,true)===0x4949;
       const fmt=(ifds[0].t339&&ifds[0].t339[0])||1;
-      log(`  Indexing ${declared} frames directly from offset ${base} (${bps}-bit, ${isLE?'LE':'BE'}).`);
+      log(`  Indexing ${usable} frame(s) directly from offset ${base} (${bps}-bit, ${isLE?'LE':'BE'}).`);
       const readFrame=fi=>{
         const off=base+fi*rawBytes, g=new Float32Array(w*h);
         if(bps===8){ const u=new Uint8Array(fileBuf,off,rawBytes);
@@ -1586,31 +1595,31 @@ async function loadTiff(fileBuf, fileSize){
         else throw new Error(`unsupported bit depth ${bps} in contiguous stack`);
         return g;
       };
-      const needC=declared*frameBytes;
+      const needC=usable*frameBytes;
       log(`  Decoded working set if fully cached: ~${fmtBytes(needC)} (budget ${fmtBytes(budget)}).`);
-      $('sFrames').textContent=declared;
+      $('sFrames').textContent=usable;
       if(needC<=budget){
         try{
-          const frames=new Array(declared);
-          for(let fi=0; fi<declared; fi++){
+          const frames=new Array(usable);
+          for(let fi=0; fi<usable; fi++){
             frames[fi]=readFrame(fi);
-            if(fi%50===0){ setProg(100*fi/declared);
-              $('loadInfo').textContent=`Loading ${fi+1}/${declared}…`; await tick(); }
+            if(fi%50===0){ setProg(100*fi/usable);
+              $('loadInfo').textContent=`Loading ${fi+1}/${usable}…`; await tick(); }
           }
-          setProg(null); $('loadInfo').textContent=`Loaded ${declared} frames into memory.`;
+          setProg(null); $('loadInfo').textContent=`Loaded ${usable} frames into memory.`;
           log('  Loaded into memory — re-runs will not re-decode.');
-          return makeStack(w,h,declared,px, fi=>frames[fi]);
+          return makeStack(w,h,usable,px, fi=>frames[fi]);
         }catch(err){
           setProg(null); if(!isAlloc(err)) throw err;
           log(`  ⚠ In-memory load hit a memory limit; decoding on demand instead.`);
         }
       }
       // Random access is O(1) here, so no heaps are needed — decode per frame.
-      $('loadInfo').textContent=`Streaming: ${declared} frames, decoded on demand.`;
+      $('loadInfo').textContent=`Streaming: ${usable} frames, decoded on demand.`;
       log(`  Exceeds budget — decoding frames on demand (no re-decode penalty: it is a plain byte read).`);
-      return makeStack(w,h,declared,px, readFrame);
+      return makeStack(w,h,usable,px, readFrame);
     }
-    log(`  ⚠ Cannot index them (compression=${cmpr}${fits?'':', declared size exceeds the file'}) —`);
+    log(`  ⚠ Cannot index them (compression=${cmpr}, ${usable} reachable) —`);
     log(`     only ${n} of ${declared} frames will be analysed.`);
   }
   log(`Decoded working set if fully cached: ~${fmtBytes(need)} (budget ${fmtBytes(budget)}).`);
