@@ -28,6 +28,10 @@ walk-through of every step.
 
 - **Loads** multi-frame TIFF stacks (8/16/32-bit, little- or big-endian,
   uncompressed or deflate/LZW-compressed). 16-bit depth is preserved.
+- **Handles very large stacks.** Contiguous ImageJ stacks (a single directory
+  entry with frames laid out after it, as written above ~4 GB) are read frame by
+  frame with `File.slice()`, so the file is never held in memory. A 4.89 GB /
+  40,000-frame stack processes in ~24 s.
 - **Memory-aware loading**: caches frames in RAM within a configurable budget,
   or streams large stacks in bounded heaps (the pattern that also enables
   real-time processing of a live camera buffer). Falls back to streaming
@@ -44,6 +48,9 @@ walk-through of every step.
   localizations gathered so far.
 - **Works on small screens**: single-column layout on phones and tablets, with
   drag/pinch-to-zoom navigation of the reconstruction (plus a scale bar).
+- **Exports** localizations as ThunderSTORM-compatible CSV, including
+  background-subtracted intensity, background level and a Thompson/Larson/Webb
+  uncertainty estimate. See the caveat on ADU-to-photon conversion below.
 
 ## Performance
 
@@ -55,6 +62,7 @@ on a laptop, running the single HTML file directly from `file://`:
 |---|---|---|---|---|
 | GATTA-PAINT 80R | 1999 | 82 × 83 | ~0.71 s | ~15,000 loc/s |
 | Nile Red / *L. lactis* | 1173 | 256 × 256 | ~0.68 s | ~129,000 loc/s |
+| 3D STORM (4.89 GB) | 40000 | 256 × 256 | ~24 s | ~182,000 loc/s |
 
 That is ~7× and ~30× faster respectively than v0.2.0, with identical
 localization counts. Notes:
@@ -97,6 +105,13 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
 ## Known limitations
 
 - 2D only; the Gaussian fit is **least-squares, not Poisson MLE**.
+- **Intensities are in ADU unless a camera gain is entered**, in which case the
+  exported `intensity [photon]` and `uncertainty [nm]` columns are not on a
+  physical scale. A single scalar gain also suits EMCCD better than sCMOS, where
+  gain, offset and read noise vary per pixel — see
+  [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md).
+- Dense samples with overlapping PSFs are fitted with a **single-emitter model**,
+  which biases positions where emitters overlap.
 - The `mean + k·σ` threshold assumes roughly stationary noise; strong background
   gradients favour a local threshold.
 - Precision figures shown in the app are for the built-in synthetic model.
@@ -106,8 +121,8 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
 Planned work is tracked in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md):
 
 1. ~~UI improvements and small-screen support~~ (done in 0.2.0)
-2. Speed review — band-pass bottleneck, Web Worker pool, WebGPU
-3. CSV export in ThunderSTORM format (needs background/photon estimation)
+2. ~~Speed review — band-pass bottleneck, Web Worker pool~~ (done in 0.3.0)
+3. ~~CSV export in ThunderSTORM format~~ (done in 0.4.0)
 4. Localization precision via FRC
 5. 3D phasor (astigmatism) via the magnitude ratio
 6. Drift correction (2D, then 3D)

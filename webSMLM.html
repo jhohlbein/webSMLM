@@ -1246,6 +1246,12 @@ X.B(E,Y);return E}return J}())
   details.sim>summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
   details.sim[open]>summary::before{content:'▾ '}
   details.sim>summary:hover{color:var(--fg)}
+  details.info{margin:6px 0 2px}
+  details.info>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:11px;
+    padding:3px 0;user-select:none;opacity:.8}
+  details.info>summary::-webkit-details-marker{display:none}
+  details.info>summary:hover{color:var(--accent);opacity:1}
+  details.info .hint{margin-top:2px}
   /* flex:1 (not width:100%) so the select shares one line with its label */
   select.sel{flex:1;min-width:0;background:#0d1117;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px}
   .hint{color:var(--muted);font-size:11px;margin:6px 0 0;line-height:1.4}
@@ -1266,7 +1272,7 @@ X.B(E,Y);return E}return J}())
   .bar.on{display:block}
   .bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
   .log{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
-    background:#010409;border:1px solid var(--line);border-radius:8px;padding:10px;height:120px;overflow:auto;white-space:pre-wrap}
+    background:#010409;border:1px solid var(--line);border-radius:8px;padding:10px;height:clamp(180px,32vh,460px);overflow:auto;white-space:pre-wrap}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:#21262d;border:1px solid var(--line);color:var(--muted)}
   a{color:var(--accent)}
   .helpbtn{background:#21262d;border:1px solid var(--accent);color:var(--accent);font-weight:600;margin-bottom:14px}
@@ -1301,7 +1307,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.3.0-dev · build 2026-07-20g · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.4.0 · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1329,11 +1335,12 @@ X.B(E,Y);return E}return J}())
         <input type="number" id="memgb" value="3" min="0.5" max="8" step="0.5" class="num"></label>
       <label class="row">Stream heap (MB)
         <input type="number" id="chunkmb" value="500" min="50" max="2000" step="50" class="num"></label>
-      <div class="hint"><b>Budget</b> — if the decoded stack fits, keep it all in RAM; re-runs then
+      <details class="info"><summary>…further info…</summary>
+        <div class="hint"><b>Budget</b> — if the decoded stack fits, keep it all in RAM; re-runs then
         skip decoding entirely. Beyond it, frames are decoded as the analysis reaches them and
         discarded (“streaming”), so memory stays bounded but re-runs re-decode.<br>
         <b>Heap</b> — chunk size for streaming, used only when every frame must go through the TIFF
-        decoder. Contiguous ImageJ stacks decode one frame at a time and ignore this.</div>
+        decoder. Contiguous ImageJ stacks decode one frame at a time and ignore this.</div></details>
       <div id="loadInfo" class="hint"></div>
     </div>
 
@@ -1353,11 +1360,12 @@ X.B(E,Y);return E}return J}())
       <input type="range" id="win" min="5" max="11" step="2" value="7">
       <label class="row" style="margin-top:10px">Exact band-pass (slower)
         <input type="checkbox" id="exactbp"></label>
-      <div class="hint">Phasor is ~100–250× faster per candidate (265× on the GATTA-PAINT test stack); Gaussian LS ≈ slightly better precision. (Current Gaussian is least-squares, not MLE.)
+      <details class="info"><summary>…further info…</summary>
+        <div class="hint">Phasor is ~100–250× faster per candidate (265× on the GATTA-PAINT test stack); Gaussian LS ≈ slightly better precision. (Current Gaussian is least-squares, not MLE.)
         σ_noise is the spread of the band-passed image, not the PSF width.
         <b>Exact band-pass</b> replaces the fast box approximation of the background with a true
         Gaussian: ~2× slower, but exactly reproducible — use it to validate the approximation
-        on your own data (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div>
+        on your own data (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div></details>
     </div>
 
     <hr class="sep">
@@ -1369,10 +1377,11 @@ X.B(E,Y);return E}return J}())
         <input type="number" id="gain" value="1" min="0.001" max="1000" step="0.01" class="num"></label>
       <label class="row">Camera offset (ADU)
         <input type="number" id="camoff" value="0" min="0" max="65535" step="1" class="num"></label>
-      <div class="hint">With gain 1 the exported “intensity [photon]” is really <b>ADU</b>, and the
+      <details class="info"><summary>…further info…</summary>
+        <div class="hint">With gain 1 the exported “intensity [photon]” is really <b>ADU</b>, and the
         uncertainty column (∝ 1/√N) is not physically meaningful. A single scalar gain suits
         <b>EMCCD</b>; on <b>sCMOS</b> gain, offset and read noise vary per pixel, so a scalar is
-        only an approximation — see <code>docs/REFACTOR_PLAN.md</code>.</div>
+        only an approximation — see <code>docs/REFACTOR_PLAN.md</code>.</div></details>
       <label class="row">Magnification <span class="val" id="magV">10×</span></label>
       <input type="range" id="mag" min="4" max="16" step="1" value="10">
       <label class="row">Render blur σ_render (px) <span class="val" id="rblurV">0.25</span></label>
@@ -1391,10 +1400,11 @@ X.B(E,Y);return E}return J}())
           <option value="99">99 %</option>
           <option value="100">Max</option>
         </select></label>
-      <div class="hint">Pixel size sets the physical scale for the scale bar and export.
+      <details class="info"><summary>…further info…</summary>
+        <div class="hint">Pixel size sets the physical scale for the scale bar and export.
         Inferno/Viridis are perceptually uniform; Fire is the classic SMLM look.
         <b>Display max</b> clips the brightest pixels so a single hot spot can't dim the rest.
-        All render settings apply instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div>
+        All render settings apply instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div></details>
     </div>
 
     <hr class="sep">
@@ -1431,8 +1441,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.3.0-dev · build 2026-07-20g
-[features: worker pool · contiguous ImageJ stacks · CSV export]
+      <div class="log" id="log">webSMLM v0.4.0 — parallel detection · large-stack streaming · CSV export
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
