@@ -1198,6 +1198,7 @@ X.B(E,Y);return E}return J}())
   :root{
     --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3;
     --muted:#8b949e; --accent:#58a6ff; --accent2:#3fb950; --warn:#d29922;
+    --danger:#da3633;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);min-height:100vh;
@@ -1219,7 +1220,10 @@ X.B(E,Y);return E}return J}())
     background:#21262d;color:var(--fg);border-radius:7px;cursor:pointer;font-size:13px}
   button:hover{border-color:var(--accent)}
   button.primary{background:var(--accent);color:#0d1117;border-color:var(--accent);font-weight:600}
-  button.primary:disabled{opacity:.5;cursor:not-allowed}
+  button.danger{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+  button.danger:hover:not(:disabled){background:#f85149;border-color:#f85149}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button:disabled:hover{border-color:var(--line)}
   input[type=file]{width:100%;font-size:12px;color:var(--muted)}
   /* Native spinners are dropped entirely: on Chrome they render black-on-black
      until hovered, and on Firefox they crowd the digits. Type the value instead. */
@@ -1231,6 +1235,8 @@ X.B(E,Y);return E}return J}())
   /* two equal buttons side by side (Load / Simulate) */
   .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .btnrow button{margin:0;padding:8px 6px;font-size:12px}
+  .runrow{grid-template-columns:2fr 1fr;margin:4px 0}   /* Run gets the weight */
+  .runrow button{padding:9px 8px;font-size:13px}
   /* collapsed-by-default simulation settings */
   details.sim{margin-top:10px}
   details.sim>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:12px;
@@ -1372,7 +1378,10 @@ X.B(E,Y);return E}return J}())
 
     <hr class="sep">
 
-    <button class="primary" id="runBtn" disabled>Run localisations ▶</button>
+    <div class="btnrow runrow">
+      <button class="primary" id="runBtn" disabled>Run localisations ▶</button>
+      <button class="danger" id="stopBtn" disabled>Stop</button>
+    </div>
     <button id="saveBtn" disabled title="CSV export arrives with Phase 3 (needs background &amp; photon estimation)">Save localisations</button>
     <div class="bar"><i id="prog"></i></div>
 
@@ -1764,9 +1773,16 @@ function drawRaw(frame,w,h,spots){
 /* ===========================================================================
    MODULE: pipeline
    =========================================================================== */
+let stopRequested=false;
+
 async function run(){
   if(!stack){ log('No data loaded.'); return; }
-  $('runBtn').disabled=true;
+  stopRequested=false;
+  // lock the data sources too: swapping the stack mid-run would pull frames
+  // out from under the loop.
+  $('runBtn').disabled=true; $('loadBtn').disabled=true; $('genBtn').disabled=true;
+  $('stopBtn').disabled=false;
+  let processed=0, stopped=false;
   try{
     const {w,h,n,px}=stack;
     const sigma=+$('psf').value, k=+$('thr').value, win=+$('win').value, method=$('method').value;
@@ -1791,27 +1807,36 @@ async function run(){
           previewMs+=performance.now()-tp;         // don't charge preview to compute time
         }
       }
+      processed=fi+1;
       if(performance.now()-lastYield > 50){        // yield on a time budget to keep the UI responsive
         $('prog').style.width=(100*fi/n).toFixed(1)+'%';
         await tick(); lastYield=performance.now();
+        // A Stop click can only be delivered while we're yielding, so this is
+        // the earliest point it can be observed — no need to poll elsewhere.
+        if(stopRequested){ stopped=true; break; }
       }
     }
-    $('prog').style.width='100%';
+    $('prog').style.width = stopped ? (100*processed/n).toFixed(1)+'%' : '100%';
     if(lastFrame) drawRaw(lastFrame,w,h,lastSpots);
     const dt=performance.now()-t0-previewMs;       // localization work only
+    const per=Math.max(1,processed);
 
     lastResult={locs,w,h,px,mag:+$('mag').value};
     rerender(true);
 
-    $('sFrames').textContent=n; $('sLoc').textContent=locs.length.toLocaleString();
-    $('sDens').textContent=(locs.length/n).toFixed(1); $('sTime').textContent=Math.round(dt).toLocaleString();
-    log(`Done: ${locs.length} localizations in ${Math.round(dt)} ms (${(dt/n).toFixed(2)} ms/frame, ${(locs.length/(dt/1000)|0).toLocaleString()} loc/s).`);
+    $('sFrames').textContent = stopped ? `${processed}/${n}` : n;
+    $('sLoc').textContent=locs.length.toLocaleString();
+    $('sDens').textContent=(locs.length/per).toFixed(1); $('sTime').textContent=Math.round(dt).toLocaleString();
+    log(`${stopped?'Stopped':'Done'}: ${locs.length} localizations from ${processed}/${n} frames in ${Math.round(dt)} ms (${(dt/per).toFixed(2)} ms/frame, ${(locs.length/(dt/1000)|0).toLocaleString()} loc/s).`);
+    if(stopped) log('Partial result shown — press “Run localisations” to start over.');
     if(groundTruth) log(`Ground-truth emitters in structure: ${groundTruth.length}.`);
   }catch(err){
     log(`⚠ Run failed: ${err.name}: ${err.message}`);
     $('prog').style.width='0%';
   }finally{
     $('runBtn').disabled=false;                    // always re-enable, even on error
+    $('loadBtn').disabled=false; $('genBtn').disabled=false;
+    $('stopBtn').disabled=true; stopRequested=false;
   }
 }
 
@@ -1858,6 +1883,10 @@ $('file').addEventListener('change',async e=>{
 });
 
 $('runBtn').addEventListener('click',run);
+$('stopBtn').addEventListener('click',()=>{
+  if($('stopBtn').disabled) return;
+  stopRequested=true; $('stopBtn').disabled=true; log('Stopping…');
+});
 // re-render (not re-localize) when any display setting changes
 $('mag').addEventListener('change',()=>{ if(lastResult) rerender(); });
 $('rblur').addEventListener('change',()=>{ if(lastResult) rerender(true); });
