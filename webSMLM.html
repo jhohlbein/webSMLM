@@ -1350,8 +1350,24 @@ X.B(E,Y);return E}return J}())
       <input type="range" id="mag" min="4" max="16" step="1" value="10">
       <label class="row">Render blur σ_render (px) <span class="val" id="rblurV">0.25</span></label>
       <input type="range" id="rblur" min="0" max="1" step="0.05" value="0.25">
+      <label class="row" style="margin-top:10px">Colour map
+        <select id="lut" class="sel">
+          <option value="fire">Fire (hot)</option>
+          <option value="inferno">Inferno</option>
+          <option value="viridis">Viridis</option>
+          <option value="grey">Grey</option>
+        </select></label>
+      <label class="row">Display max
+        <select id="lutpct" class="sel">
+          <option value="99.9">99.9 %</option>
+          <option value="99.5">99.5 %</option>
+          <option value="99">99 %</option>
+          <option value="100">Max</option>
+        </select></label>
       <div class="hint">Pixel size sets the physical scale for the scale bar and export.
-        Magnification &amp; blur re-render instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div>
+        Inferno/Viridis are perceptually uniform; Fire is the classic SMLM look.
+        <b>Display max</b> clips the brightest pixels so a single hot spot can't dim the rest.
+        All render settings apply instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div>
     </div>
 
     <hr class="sep">
@@ -1630,17 +1646,60 @@ let srFull=null;                       // offscreen full-res reconstruction
 const view={zoom:1,cx:0,cy:0};         // display px per srFull px; center in srFull coords
 let dragging=null;
 
-function renderSuperRes(locs,w,h,mag,blurPx){
+/* -- colour maps -------------------------------------------------------------
+   "fire" reproduces the original black→red→yellow→white ramp. "inferno" and
+   "viridis" are the matplotlib maps, sampled every 0.1 and linearly
+   interpolated — both perceptually uniform, so equal steps in density read as
+   equal steps in brightness (fire does not have that property).
+   ------------------------------------------------------------------------- */
+const LUT_CPS={
+  inferno:[[0,0,4],[22,11,57],[66,10,104],[106,23,110],[147,38,103],
+           [188,55,84],[221,81,58],[243,120,25],[252,165,10],[246,215,70],[252,255,164]],
+  viridis:[[68,1,84],[72,40,120],[62,73,137],[49,104,142],[38,130,142],
+           [31,158,137],[53,183,121],[110,206,88],[181,222,43],[216,226,25],[253,231,37]]
+};
+const _lutCache={};
+function getLUT(name){
+  if(_lutCache[name]) return _lutCache[name];
+  const lut=new Uint8Array(256*3), cps=LUT_CPS[name];
+  for(let i=0;i<256;i++){
+    const t=i/255; let r,g,b;
+    if(name==='grey'){ r=g=b=t*255; }
+    else if(cps){ const x=t*(cps.length-1), k=Math.min(cps.length-2,x|0), f=x-k;
+      r=cps[k][0]+(cps[k+1][0]-cps[k][0])*f;
+      g=cps[k][1]+(cps[k+1][1]-cps[k][1])*f;
+      b=cps[k][2]+(cps[k+1][2]-cps[k][2])*f; }
+    else { r=Math.min(1,t*3)*255; g=Math.min(1,Math.max(0,t*3-1))*255; b=Math.min(1,Math.max(0,t*3-2))*255; }
+    lut[i*3]=r; lut[i*3+1]=g; lut[i*3+2]=b;
+  }
+  return _lutCache[name]=lut;
+}
+
+// Robust display maximum: the value below which `pct`% of pixels fall, via a
+// 4096-bin histogram (O(n), no sort). Stops one hot pixel from dimming the
+// whole reconstruction. pct>=100 falls back to the true maximum.
+function displayMax(buf,pct){
+  let mx=0; for(let i=0;i<buf.length;i++) if(buf[i]>mx) mx=buf[i];
+  if(mx<=0||pct>=100) return mx;
+  const NB=4096, hist=new Uint32Array(NB), scale=(NB-1)/mx;
+  for(let i=0;i<buf.length;i++) hist[(buf[i]*scale)|0]++;
+  const target=buf.length*pct/100;
+  let cum=0;
+  for(let b=0;b<NB;b++){ cum+=hist[b]; if(cum>=target) return Math.max((b+1)/scale,1e-9); }
+  return mx;
+}
+
+function renderSuperRes(locs,w,h,mag,blurPx,lutName,pct){
   const W=w*mag, H=h*mag, acc=new Float32Array(W*H);
   for(const L of locs){ const ix=Math.round(L.x*mag), iy=Math.round(L.y*mag);
     if(ix<0||iy<0||ix>=W||iy>=H) continue; acc[iy*W+ix]+=1; }
   const buf = blurPx>0 ? blur(acc,W,H,blurPx*mag*0.3) : acc;
-  let mxv=0; for(let i=0;i<buf.length;i++) if(buf[i]>mxv)mxv=buf[i];
+  const norm=displayMax(buf,pct), lut=getLUT(lutName);
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const ctx=cv.getContext('2d'), out=ctx.createImageData(W,H);
-  for(let i=0;i<buf.length;i++){ const t=mxv>0?Math.min(1,Math.sqrt(buf[i]/mxv)):0;
-    const rr=Math.min(1,t*3),gg=Math.min(1,Math.max(0,t*3-1)),bb=Math.min(1,Math.max(0,t*3-2));
-    out.data[i*4]=rr*255; out.data[i*4+1]=gg*255; out.data[i*4+2]=bb*255; out.data[i*4+3]=255; }
+  for(let i=0;i<buf.length;i++){
+    const t=norm>0?Math.min(1,Math.sqrt(buf[i]/norm)):0, j=(t*255)|0;   // sqrt stretch
+    out.data[i*4]=lut[j*3]; out.data[i*4+1]=lut[j*3+1]; out.data[i*4+2]=lut[j*3+2]; out.data[i*4+3]=255; }
   ctx.putImageData(out,0,0); return cv;
 }
 function fitZoom(){ const d=$('sr'); return Math.min(d.width/srFull.width, d.height/srFull.height); }
@@ -1681,7 +1740,8 @@ function rerender(keepView){
   const mag=+$('mag').value, rblur=+$('rblur').value;
   lastResult.mag=mag;
   const pw=srFull&&srFull.width, ph=srFull&&srFull.height;
-  srFull=renderSuperRes(lastResult.locs, lastResult.w, lastResult.h, mag, rblur);
+  srFull=renderSuperRes(lastResult.locs, lastResult.w, lastResult.h, mag, rblur,
+                        $('lut').value, +$('lutpct').value);
   if(!keepView || srFull.width!==pw || srFull.height!==ph) fitView();
   clampView(); drawView();
   $('srInfo').textContent=`${lastResult.locs.length.toLocaleString()} locs · ${mag}× · ${lastResult.px} nm/px · scroll to zoom, drag to pan`;
@@ -1798,9 +1858,11 @@ $('file').addEventListener('change',async e=>{
 });
 
 $('runBtn').addEventListener('click',run);
-// re-render (not re-localize) when magnification / render blur change
+// re-render (not re-localize) when any display setting changes
 $('mag').addEventListener('change',()=>{ if(lastResult) rerender(); });
-$('rblur').addEventListener('change',()=>{ if(lastResult) rerender(); });
+$('rblur').addEventListener('change',()=>{ if(lastResult) rerender(true); });
+$('lut').addEventListener('change',()=>{ if(lastResult) rerender(true); });
+$('lutpct').addEventListener('change',()=>{ if(lastResult) rerender(true); });
 
 /* ---------------------------------------------------------------------------
    Navigation on the super-res canvas — Pointer Events so mouse, trackpad, pen
