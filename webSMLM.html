@@ -1535,26 +1535,67 @@ async function loadTiff(fileBuf, fileSize){
   const w=ifds[0].width, h=ifds[0].height, n=ifds.length, px=+$('pxnm').value;
   const frameBytes=w*h*4, need=n*frameBytes, budget=readBudget();
   log(`File: ${n} frames · ${w}×${h} · ${fmtBytes(fileSize)} on disk`);
-  // ImageJ/Micro-Manager record the true frame count in the description. If that
-  // disagrees with the number of IFDs we found, the file uses a contiguous
-  // layout whose frames we are not indexing — and we would otherwise silently
-  // analyse only the frames we did find.
-  try{
-    const raw=ifds[0].t270, desc=raw?(typeof raw==='string'?raw:String.fromCharCode.apply(null,raw.slice(0,400))):'';
-    const m=/images=(\d+)/i.exec(desc);
-    const declared=m?+m[1]:0;
-    if(declared>n){
-      log(`⚠ File declares images=${declared} but only ${n} IFD${n===1?'':'s'} were found —`);
-      log(`   ${declared-n} frame(s) will be MISSED. This is the ImageJ/contiguous`);
-      log(`   stack layout (common above ~4 GB, where 32-bit TIFF offsets run out).`);
-      log(`   Bytes on disk suggest ~${Math.floor(fileSize/(w*h*2))} frames at 16-bit.`);
-    }
-  }catch(_){}
-  log(`Decoded working set if fully cached: ~${fmtBytes(need)} (budget ${fmtBytes(budget)}).`);
-  $('sFrames').textContent=n;
-
+  /* ImageJ writes large stacks with a SINGLE IFD and the frames laid out
+     contiguously afterwards (32-bit TIFF offsets cannot chain past 4 GB), with
+     the real count recorded as "images=N" in the description. UTIF sees one
+     frame, so without this the other N-1 are silently ignored.
+     UTIF stores ASCII tags as an array, hence the join(). */
   const isAlloc = err => err instanceof RangeError ||
     /alloc|out of memory|invalid array length|array buffer/i.test(err&&err.message||'');
+
+  const descOf=t=>{ const v=ifds[0][t]; return !v?'' : (typeof v==='string'?v : (v.join?v.join(''):String(v))); };
+  const mImg=/images=(\d+)/i.exec(descOf('t270'));
+  const declared=mImg?+mImg[1]:0;
+  if(declared>n){
+    const bps=(ifds[0].t258&&ifds[0].t258[0])||8, spp=(ifds[0].t277&&ifds[0].t277[0])||1;
+    const rawBytes=w*h*(bps>>3)*spp, base=(ifds[0].t273&&ifds[0].t273[0])||0;
+    const cmpr=(ifds[0].t259&&ifds[0].t259[0])||1;
+    const fits=base+declared*rawBytes<=fileBuf.byteLength;
+    log(`Contiguous stack: description declares ${declared} frames, ${n} IFD${n===1?'':'s'} present.`);
+    if(cmpr===1 && rawBytes>0 && fits){
+      const isLE=new DataView(fileBuf,0,2).getUint16(0,true)===0x4949;
+      const fmt=(ifds[0].t339&&ifds[0].t339[0])||1;
+      log(`  Indexing ${declared} frames directly from offset ${base} (${bps}-bit, ${isLE?'LE':'BE'}).`);
+      const readFrame=fi=>{
+        const off=base+fi*rawBytes, g=new Float32Array(w*h);
+        if(bps===8){ const u=new Uint8Array(fileBuf,off,rawBytes);
+          for(let i=0;i<w*h;i++) g[i]=u[i*spp]; return g; }
+        const dv=new DataView(fileBuf,off,rawBytes);
+        if(bps===16)               for(let i=0;i<w*h;i++) g[i]=dv.getUint16(i*2*spp,isLE);
+        else if(bps===32&&fmt===3) for(let i=0;i<w*h;i++) g[i]=dv.getFloat32(i*4*spp,isLE);
+        else if(bps===32)          for(let i=0;i<w*h;i++) g[i]=dv.getUint32(i*4*spp,isLE);
+        else throw new Error(`unsupported bit depth ${bps} in contiguous stack`);
+        return g;
+      };
+      const needC=declared*frameBytes;
+      log(`  Decoded working set if fully cached: ~${fmtBytes(needC)} (budget ${fmtBytes(budget)}).`);
+      $('sFrames').textContent=declared;
+      if(needC<=budget){
+        try{
+          const frames=new Array(declared);
+          for(let fi=0; fi<declared; fi++){
+            frames[fi]=readFrame(fi);
+            if(fi%50===0){ setProg(100*fi/declared);
+              $('loadInfo').textContent=`Loading ${fi+1}/${declared}…`; await tick(); }
+          }
+          setProg(null); $('loadInfo').textContent=`Loaded ${declared} frames into memory.`;
+          log('  Loaded into memory — re-runs will not re-decode.');
+          return makeStack(w,h,declared,px, fi=>frames[fi]);
+        }catch(err){
+          setProg(null); if(!isAlloc(err)) throw err;
+          log(`  ⚠ In-memory load hit a memory limit; decoding on demand instead.`);
+        }
+      }
+      // Random access is O(1) here, so no heaps are needed — decode per frame.
+      $('loadInfo').textContent=`Streaming: ${declared} frames, decoded on demand.`;
+      log(`  Exceeds budget — decoding frames on demand (no re-decode penalty: it is a plain byte read).`);
+      return makeStack(w,h,declared,px, readFrame);
+    }
+    log(`  ⚠ Cannot index them (compression=${cmpr}${fits?'':', declared size exceeds the file'}) —`);
+    log(`     only ${n} of ${declared} frames will be analysed.`);
+  }
+  log(`Decoded working set if fully cached: ~${fmtBytes(need)} (budget ${fmtBytes(budget)}).`);
+  $('sFrames').textContent=n;
 
   // Chunked-streaming stack: one ~chunkMB heap resident at a time. Heap size
   // shrinks automatically if even a single heap can't be allocated. This same
