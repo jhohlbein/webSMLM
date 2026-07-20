@@ -1301,7 +1301,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.3.0-dev · build 2026-07-20d · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.3.0-dev · build 2026-07-20e · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1431,7 +1431,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.3.0-dev · build 2026-07-20d
+      <div class="log" id="log">webSMLM v0.3.0-dev · build 2026-07-20e
 [features: worker pool · contiguous ImageJ stacks · CSV export]
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
@@ -2125,11 +2125,17 @@ async function exportCSV(){
    SharedArrayBuffer is unavailable (needs COOP/COEP, which neither file:// nor
    GitHub Pages provides), so frame batches are passed by structured clone.
    =========================================================================== */
+// Module-level state the copied functions rely on. A worker gets a fresh global
+// scope, so anything missing here becomes a ReferenceError inside the worker.
+const WORKER_PRELUDE=[
+  "let _mapKey='',_mapX=null,_mapY=null;",
+  "const _bmCache={};",
+  "let _bpW=0,_bpH=0,_bpSm=null,_bpLg=null,_bpTmp=null;",
+  "let _pcol=null,_prow=null,_pN=0;",
+].join('\n');
+
 function workerSource(){
-  return [
-    "let _mapKey='',_mapX=null,_mapY=null;",
-    "const _bmCache={};",
-    "let _bpW=0,_bpH=0,_bpSm=null,_bpLg=null,_bpTmp=null;",
+  const body=[
     "const _clMirror="+_clMirror.toString()+";",
     blurInto.toString(), boxSizes.toString(), boxMap.toString(),
     boxH.toString(), boxV.toString(), boxInto.toString(),
@@ -2170,6 +2176,14 @@ function workerSource(){
       postMessage({arr,tD,tF,nC,count:frames.length},[arr.buffer]);
     };`
   ].join('\n');
+  // Guard the failure mode this design invites: a function gaining new
+  // module-level state that nobody remembers to add to WORKER_PRELUDE. Without
+  // this the worker dies on a ReferenceError and silently falls back to the
+  // single-threaded path.
+  const declared=new Set((WORKER_PRELUDE+' _clMirror').match(/_[A-Za-z]\w*/g)||[]);
+  const missing=[...new Set(body.match(/\b_[A-Za-z]\w*/g)||[])].filter(x=>!declared.has(x));
+  if(missing.length) throw new Error('worker prelude is missing: '+missing.join(', '));
+  return WORKER_PRELUDE+'\n'+body;
 }
 
 let _pool=undefined;                                // undefined = not probed yet
