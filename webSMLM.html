@@ -1348,8 +1348,8 @@ X.B(E,Y);return E}return J}())
         <input type="number" id="pxnm" value="100" min="1" max="2000" step="1" class="num"></label>
       <label class="row">Magnification <span class="val" id="magV">10×</span></label>
       <input type="range" id="mag" min="4" max="16" step="1" value="10">
-      <label class="row">Render blur σ_render (px) <span class="val" id="rblurV">1.00</span></label>
-      <input type="range" id="rblur" min="0" max="1" step="0.05" value="1">
+      <label class="row">Render blur σ_render (px) <span class="val" id="rblurV">0.25</span></label>
+      <input type="range" id="rblur" min="0" max="1" step="0.05" value="0.25">
       <div class="hint">Pixel size sets the physical scale for the scale bar and export.
         Magnification &amp; blur re-render instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div>
     </div>
@@ -1674,12 +1674,16 @@ function drawScaleBar(ctx,DW,DH){
   ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
   ctx.fillText(bar>=1000?(bar/1000)+' µm':bar+' nm', x+barPx/2, y-3);
 }
-function rerender(){
+// keepView: used by the live preview during a run, so the reconstruction can
+// refresh without yanking the user's zoom/pan back to fit on every update.
+function rerender(keepView){
   if(!lastResult) return;
   const mag=+$('mag').value, rblur=+$('rblur').value;
   lastResult.mag=mag;
+  const pw=srFull&&srFull.width, ph=srFull&&srFull.height;
   srFull=renderSuperRes(lastResult.locs, lastResult.w, lastResult.h, mag, rblur);
-  fitView(); drawView();
+  if(!keepView || srFull.width!==pw || srFull.height!==ph) fitView();
+  clampView(); drawView();
   $('srInfo').textContent=`${lastResult.locs.length.toLocaleString()} locs · ${mag}× · ${lastResult.px} nm/px · scroll to zoom, drag to pan`;
 }
 
@@ -1708,7 +1712,7 @@ async function run(){
     const sigma=+$('psf').value, k=+$('thr').value, win=+$('win').value, method=$('method').value;
     const border=(win-1)/2+1, locs=[]; let lastSpots=null, lastFrame=null;
     log(`\nRun: ${n} frames · ${method==='phasor'?'phasor':'Gaussian LS'} fit · σ=${sigma} · k=${k} · win=${win}`);
-    const t0=performance.now(); let lastYield=t0;
+    const t0=performance.now(); let lastYield=t0, previewMs=0;
     for(let fi=0; fi<n; fi++){
       const img=stack.getFrame(fi);
       const filt=bandpass(img,w,h,sigma);
@@ -1717,9 +1721,15 @@ async function run(){
         const L = method==='phasor' ? phasorFit(img,w,h,cx,cy,win) : gaussianFit(img,w,h,cx,cy,win,sigma);
         if(L){ L.frame=fi; locs.push(L); }
       }
-      if(fi % 100 === 0){                          // refresh the raw view every 100th frame
+      if(fi % 100 === 0){                          // refresh both views every 100th frame
         drawRaw(img,w,h,maxima); lastSpots=maxima; lastFrame=img;
         $('rawInfo').textContent=`frame ${fi+1}/${n} — ${maxima.length} spots`;
+        if(locs.length){                           // live super-res preview
+          const tp=performance.now();
+          lastResult={locs,w,h,px,mag:+$('mag').value};
+          rerender(true);
+          previewMs+=performance.now()-tp;         // don't charge preview to compute time
+        }
       }
       if(performance.now()-lastYield > 50){        // yield on a time budget to keep the UI responsive
         $('prog').style.width=(100*fi/n).toFixed(1)+'%';
@@ -1728,10 +1738,10 @@ async function run(){
     }
     $('prog').style.width='100%';
     if(lastFrame) drawRaw(lastFrame,w,h,lastSpots);
-    const dt=performance.now()-t0;
+    const dt=performance.now()-t0-previewMs;       // localization work only
 
     lastResult={locs,w,h,px,mag:+$('mag').value};
-    rerender();
+    rerender(true);
 
     $('sFrames').textContent=n; $('sLoc').textContent=locs.length.toLocaleString();
     $('sDens').textContent=(locs.length/n).toFixed(1); $('sTime').textContent=Math.round(dt).toLocaleString();
