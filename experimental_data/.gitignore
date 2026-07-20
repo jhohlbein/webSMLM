@@ -1,0 +1,23 @@
+# Experimental image data is kept OUT of the repository by default.
+#
+# Reasons: this repo is public, SMLM stacks routinely exceed GitHub's 100 MB
+# per-file hard limit, and anything committed stays in git history forever
+# (bloating every future clone) even if deleted later.
+#
+# Files here are still fully usable locally for benchmarking — they just are
+# not tracked. To deliberately commit a small fixture, force-add it:
+#     git add -f experimental_data/small_crop.tif
+
+*.tif
+*.tiff
+*.nd2
+*.czi
+*.lif
+*.ome.tif
+*.ome.tiff
+*.csv
+*.zip
+
+# ...but keep this folder's own documentation tracked
+!.gitignore
+!README.md
