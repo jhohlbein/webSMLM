@@ -1309,7 +1309,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21k · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21l · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1438,12 +1438,14 @@ X.B(E,Y);return E}return J}())
       <div id="zrangeRow" style="display:none">
         <label class="row">z min (nm) <input type="number" id="zmin" step="10" class="num" placeholder="auto"></label>
         <label class="row">z max (nm) <input type="number" id="zmax" step="10" class="num" placeholder="auto"></label>
-        <div class="hint">Localizations with z outside [min, max] render black.</div>
       </div>
       <details class="info"><summary>…further info…</summary>
         <div class="hint">Pixel size sets the physical scale for the scale bar and export.
         Inferno/Viridis are perceptually uniform; Fire is the classic SMLM look.
         <b>Display max</b> clips the brightest pixels so a single hot spot can't dim the rest.
+        <b>Colour by depth (z)</b> (Phasor 3D results) sets each pixel's hue from the mean z and its
+        brightness from density; <b>z min / z max</b> set the colour range and render anything outside it
+        black — narrow the window to optically section through the volume.
         All render settings apply instantly — no refit. Scroll/pinch to zoom, drag to pan, double-click/tap to reset.</div></details>
     </div>
 
@@ -1486,7 +1488,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21k (phase 5: 3D astigmatism)
+      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21l (phase 5: 3D astigmatism)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2826,10 +2828,11 @@ $('calSaveBtn').addEventListener('click',exportCalibration);
 function updateMethodUI(){ $('cal3dRow').style.display = $('method').value==='phasor3d' ? 'block' : 'none'; }
 $('method').addEventListener('change',updateMethodUI); updateMethodUI();
 
+// Keep the in-column line short and fixed-height so the sidebar never reflows;
+// the detail (RMS, ratio range) goes to the log instead.
 function updateCalStatus(){
   const el=$('cal3dStatus'); if(!el) return;
-  if(cal3d) el.innerHTML=`Calibration active — z(ratio), axial RMS ≈ ${cal3d.rms?cal3d.rms.toFixed(0):'?'} nm, ratio ${cal3d.rmin.toFixed(2)}–${cal3d.rmax.toFixed(2)}.`;
-  else el.textContent='No calibration loaded. Run Calibrate, or load a *_calib.json.';
+  el.textContent = cal3d ? 'Calibration active ✓' : 'No calibration loaded.';
 }
 $('loadCalBtn').addEventListener('click',()=>$('calFile').click());
 $('calFile').addEventListener('change',async e=>{
@@ -2839,7 +2842,7 @@ $('calFile').addEventListener('change',async e=>{
     const z=o.phasor_z_from_ratio;
     if(!z||!z.coef) throw new Error('no phasor_z_from_ratio in file');
     cal3d={coef:z.coef,rmin:z.rmin,rmax:z.rmax,rms:z.rms_nm};
-    log(`Loaded calibration ${f.name}: z(ratio) axial RMS ≈ ${(z.rms_nm||0).toFixed(0)} nm.`);
+    log(`Loaded calibration ${f.name}: z(ratio) axial RMS ≈ ${(z.rms_nm||0).toFixed(0)} nm, valid ratio ${z.rmin.toFixed(2)}–${z.rmax.toFixed(2)}.`);
     updateCalStatus();
   }catch(err){ log('Calibration load failed: '+err.message); }
   e.target.value='';
