@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Hohlbein
     given-names: Johannes
-version: 0.4.0
-date-released: "2026-07-20"
+version: 0.4.1
+date-released: "2026-07-21"
 license: CC-BY-4.0
 repository-code: "https://github.com/HohlbeinLab/webSMLM"
 url: "https://hohlbeinlab.github.io/webSMLM/"
