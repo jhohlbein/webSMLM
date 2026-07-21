@@ -1247,11 +1247,12 @@ X.B(E,Y);return E}return J}())
   details.sim[open]>summary::before{content:'▾ '}
   details.sim>summary:hover{color:var(--fg)}
   details.info{margin:6px 0 2px}
+  /* right-aligned so it reads as a secondary info toggle, not an expandable panel */
   details.info>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:11px;
-    padding:3px 0;user-select:none;opacity:.8}
+    padding:3px 0;user-select:none;opacity:.8;text-align:right}
   details.info>summary::-webkit-details-marker{display:none}
   details.info>summary:hover{color:var(--accent);opacity:1}
-  details.info .hint{margin-top:2px}
+  details.info .hint{margin-top:2px;text-align:left}
   /* flex:1 (not width:100%) so the select shares one line with its label */
   select.sel{flex:1;min-width:0;background:#0d1117;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px}
   .hint{color:var(--muted);font-size:11px;margin:6px 0 0;line-height:1.4}
@@ -1308,7 +1309,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21e · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21f · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1471,7 +1472,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21e (phase 5: 3D astigmatism)
+      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21f (phase 5: 3D astigmatism)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
