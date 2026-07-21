@@ -1308,7 +1308,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21b · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21c · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1367,6 +1367,26 @@ X.B(E,Y);return E}return J}())
         <b>Exact band-pass</b> replaces the fast box approximation of the background with a true
         Gaussian: ~2× slower, but exactly reproducible — use it to validate the approximation
         on your own data (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div></details>
+    </div>
+
+    <hr class="sep">
+
+    <div class="group">
+      <details class="sim" id="calibBox">
+        <summary>3D astigmatism calibration</summary>
+        <label class="row" style="margin-top:6px">First frame
+          <input type="number" id="calFirst" value="1" min="1" step="1" class="num"></label>
+        <label class="row">Last frame
+          <input type="number" id="calLast" value="1" min="1" step="1" class="num"></label>
+        <label class="row">z-step (nm)
+          <input type="number" id="calStep" value="10" min="0.1" step="1" class="num"></label>
+        <label class="row">z=0 ref frame (0=auto)
+          <input type="number" id="calRef" value="0" min="0" step="1" class="num"></label>
+        <button id="calBtn" style="margin-top:8px">Calibrate ▶</button>
+        <div class="hint">Load a bead z-stack (stage scanned through focus). Detects every spot per
+          frame, fits an elliptical Gaussian → σ_x / σ_y vs z, and fits σ = a(z−c)² + b to each.
+          Uses the detection settings above. Crop the range to ~±500 nm around focus for a good fit.</div>
+      </details>
     </div>
 
     <hr class="sep">
@@ -1447,7 +1467,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21b (phase 5: 3D astigmatism)
+      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21c (phase 5: 3D astigmatism)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -1910,6 +1930,56 @@ function gaussianFit(img,w,h,cx,cy,win,sigma0){
   return {x:p[1],y:p[2],photons:A*2*Math.PI*s2,
           bg:b, bgstd:Math.sqrt(e2/Math.max(1,cnt)), sigma:s};
 }
+// -- elliptical 2D Gaussian (independent σx, σy) for astigmatic 3D calibration.
+// 6 params [A, x0, y0, sx, sy, b]; Gauss-Newton + line search, like gaussianFit.
+function ellipseSSE(img,w,cx,cy,r,p){ const [A,x0,y0,sx,sy,b]=p, sx2=sx*sx, sy2=sy*sy; let e=0;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){ const x=cx+dx,y=cy+dy;
+    const res=b+A*Math.exp(-((x-x0)**2/(2*sx2)+(y-y0)**2/(2*sy2)))-img[y*w+x]; e+=res*res; } return e; }
+function gaussianFitElliptical(img,w,h,cx,cy,win,sigma0){
+  const r=(win-1)/2; let mn=Infinity,mx=-Infinity;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const v=img[(cy+dy)*w+(cx+dx)];if(v<mn)mn=v;if(v>mx)mx=v;}
+  let p=[mx-mn,cx,cy,sigma0,sigma0,mn];
+  const Z=()=>[0,0,0,0,0,0];
+  for(let it=0;it<30;it++){
+    const JtJ=[Z(),Z(),Z(),Z(),Z(),Z()],Jtr=Z();
+    const [A,x0,y0,sx,sy,b]=p, sx2=sx*sx, sy2=sy*sy;
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      const x=cx+dx,y=cy+dy,ux=x-x0,uy=y-y0,
+            E=Math.exp(-(ux*ux/(2*sx2)+uy*uy/(2*sy2))),g=A*E,res=b+g-img[y*w+x];
+      const J=[E, g*ux/sx2, g*uy/sy2, g*ux*ux/(sx2*sx), g*uy*uy/(sy2*sy), 1];
+      for(let a=0;a<6;a++){Jtr[a]+=J[a]*res;for(let c=0;c<6;c++)JtJ[a][c]+=J[a]*J[c];}
+    }
+    for(let a=0;a<6;a++)JtJ[a][a]*=1.0001;
+    const dp=solveLin(JtJ,Jtr.map(v=>-v)); if(!dp)break;
+    let step=1,cur=ellipseSSE(img,w,cx,cy,r,p),moved=false;
+    for(let ls=0;ls<25;ls++){ const np=p.map((v,i)=>v+step*dp[i]);
+      np[3]=Math.min(6,Math.max(0.5,np[3])); np[4]=Math.min(6,Math.max(0.5,np[4]));
+      if(np[0]>0&&ellipseSSE(img,w,cx,cy,r,np)<cur){p=np;moved=true;break;} step*=0.5; }
+    if(!moved)break; if(Math.hypot(step*dp[1],step*dp[2])<1e-5)break;
+  }
+  const [A,x0,y0,sx,sy,b]=p;
+  if(A<=0||Math.abs(x0-cx)>r||Math.abs(y0-cy)>r||!isFinite(x0)||!isFinite(y0)) return null;
+  let e2=0,cnt=0,sig2=0; const sx2=sx*sx, sy2=sy*sy;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){ const x=cx+dx,y=cy+dy;
+    const res=b+A*Math.exp(-((x-x0)**2/(2*sx2)+(y-y0)**2/(2*sy2)))-img[y*w+x]; e2+=res*res; cnt++; sig2+=img[y*w+x]**2; }
+  const rms=Math.sqrt(e2/Math.max(1,cnt));
+  return {x:x0,y:y0,sx,sy,photons:A*2*Math.PI*sx*sy,bg:b,bgstd:rms,amp:A,
+          rrel: rms/Math.max(1,A)};          // residual relative to amplitude — a fit-quality score
+}
+
+// Vertex-form parabola σ(z)=a(z−c)²+b (Martens SI). Fit the general quadratic
+// Az²+Bz+C by least squares (linear, no initial guess) then convert.
+function fitVertexQuad(zs,ys){
+  let S0=zs.length,S1=0,S2=0,S3=0,S4=0,T0=0,T1=0,T2=0;
+  for(let i=0;i<zs.length;i++){ const z=zs[i],y=ys[i],z2=z*z;
+    S1+=z; S2+=z2; S3+=z2*z; S4+=z2*z2; T0+=y; T1+=y*z; T2+=y*z2; }
+  const M=[[S4,S3,S2],[S3,S2,S1],[S2,S1,S0]], sol=solveLin(M,[T2,T1,T0]);
+  if(!sol) return null;
+  const [A,B,C]=sol;
+  if(Math.abs(A)<1e-12) return {A,B,C,a:A,c:0,b:C,at:z=>A*z*z+B*z+C};
+  return {A,B,C,a:A,c:-B/(2*A),b:C-B*B/(4*A),at:z=>A*z*z+B*z+C};
+}
+
 /* -- phasor localization (Martens 2018): first Fourier coefficient, no iteration --
    Also estimates background from the ROI perimeter ring (the outermost pixels of
    the fit window, which are dominated by background rather than the PSF) so that
@@ -1942,8 +2012,14 @@ function phasorFit(img,w,h,cx,cy,win){
     reX+=col[k]*c; imX-=col[k]*s; reY+=row[k]*c; imY-=row[k]*s; }
   let ax=Math.atan2(imX,reX); if(ax>0)ax-=2*Math.PI;
   let ay=Math.atan2(imY,reY); if(ay>0)ay-=2*Math.PI;
+  // First-coefficient magnitude, normalised by the DC term (tot), is a width
+  // proxy: a narrow PSF concentrates power in the first harmonic (high value),
+  // a broad one spreads it (low value). For astigmatism the x/y RATIO carries z
+  // (Martens 2018). Not a σ in px — a monotonic proxy, calibrated against z.
+  const magX=Math.hypot(reX,imX)/Math.max(1,tot), magY=Math.hypot(reY,imY)/Math.max(1,tot);
   return { x: cx-r+Math.abs(ax)/(2*Math.PI/N), y: cy-r+Math.abs(ay)/(2*Math.PI/N),
-           photons: tot-bg*N*N, bg, bgstd, sigma:0 };   // sigma:0 = "not fitted"
+           photons: tot-bg*N*N, bg, bgstd, sigma:0,   // sigma:0 = "not fitted"
+           pmagX:magX, pmagY:magY, pratio:magY/Math.max(1e-9,magX) };
 }
 
 /* ===========================================================================
@@ -2228,6 +2304,139 @@ async function getPool(){
 }
 
 /* ===========================================================================
+   MODULE: calibration — astigmatic 3D width-vs-z curves
+   Detect every spot in each z-plane (stage scan → all emitters share z),
+   elliptical-fit σx/σy, pool across the field, fit σ = a(z−c)² + b per axis.
+   =========================================================================== */
+let calib=null;                              // non-null ⇒ the SR panel shows the plot
+
+// Robust vertex-quadratic fit: fit, reject points >3·MAD from the curve, refit once.
+function robustQuad(zs,ys){
+  let q=fitVertexQuad(zs,ys); if(!q) return null;
+  const res=zs.map((z,i)=>ys[i]-q.at(z)), ar=res.map(Math.abs).slice().sort((a,b)=>a-b);
+  const mad=ar[ar.length>>1]||0, cut=3*1.4826*mad;
+  if(cut>0){ const zz=[],yy=[];
+    for(let i=0;i<zs.length;i++) if(Math.abs(res[i])<=cut){ zz.push(zs[i]); yy.push(ys[i]); }
+    if(zz.length>=8){ const q2=fitVertexQuad(zz,yy); if(q2){ q2.kept=zz.length; q2.total=zs.length; return q2; } } }
+  q.kept=zs.length; q.total=zs.length; return q;
+}
+
+async function runCalibration(){
+  if(!stack){ log('Load a bead z-stack first.'); return; }
+  const first=Math.max(1,+$('calFirst').value|0), last=Math.min(stack.n,+$('calLast').value|0);
+  const step=+$('calStep').value||10, refFr=+$('calRef').value|0;
+  if(last<=first){ log('Calibration: last frame must exceed first.'); return; }
+  const {w,h,px}=stack, sigma=+$('psf').value, k=+$('thr').value, win=+$('win').value,
+        exactBP=$('exactbp').checked, border=(win-1)/2+1;
+  $('calBtn').disabled=true; $('runBtn').disabled=true; calib=null;
+  try{
+    log(`\nCalibration: frames ${first}–${last} · z-step ${step} nm · win ${win} · k ${k}`);
+    const pts=[]; let lastYield=performance.now();               // {fi, sx, sy, pr, rrel}
+    for(let fi=first-1; fi<last; fi++){
+      const img=(await stack.getFrames(fi,fi+1))[0];
+      const maxima=findMaxima(bandpass(img,w,h,sigma,exactBP),w,h,k,border);
+      for(const [cx,cy] of maxima){
+        const L=gaussianFitElliptical(img,w,h,cx,cy,win,sigma); if(!L) continue;
+        const P=phasorFit(img,w,h,cx,cy,win);
+        pts.push({fi,sx:L.sx,sy:L.sy,pr:P.pratio,rrel:L.rrel});
+      }
+      if(performance.now()-lastYield>50){
+        drawRaw(img,w,h,maxima); $('rawInfo').textContent=`calibrating frame ${fi+1}/${last}`;
+        setProg(100*(fi-first+1)/(last-first+1)); await tick(); lastYield=performance.now();
+      }
+    }
+    setProg(null);
+    if(pts.length<12){ log(`Only ${pts.length} usable spots — lower the threshold or widen the range.`); return; }
+    // quality filter: drop fits that hit the σ clamp or have a high relative residual
+    const rr=pts.map(p=>p.rrel).slice().sort((a,b)=>a-b), rcut=Math.max(0.05, 3*(rr[rr.length>>1]||0));
+    const good=pts.filter(p=> p.sx>0.55&&p.sx<5.9&&p.sy>0.55&&p.sy<5.9 && p.rrel<rcut);
+    log(`  ${pts.length} spots detected, ${good.length} pass quality filter.`);
+    // absolute z per frame (nm); reference applied after we know the crossing
+    const zAbs=p=>p.fi*step;
+    let zx=good.map(zAbs), sxN=good.map(p=>p.sx*px), syN=good.map(p=>p.sy*px);
+    const qx0=robustQuad(zx,sxN), qy0=robustQuad(zx,syN);
+    if(!qx0||!qy0){ log('  Quadratic fit failed.'); return; }
+    // z=0 reference: manual frame, else the σx=σy crossing (focal plane)
+    let zref;
+    if(refFr>0) zref=(refFr-1)*step;
+    else{ const A=qx0.A-qy0.A,B=qx0.B-qy0.B,C=qx0.C-qy0.C;             // qx=qy → Az²+Bz+C=0
+      const zlo=(first-1)*step, zhi=(last-1)*step, mid=(zlo+zhi)/2;
+      if(Math.abs(A)<1e-12) zref=Math.abs(B)>1e-12?-C/B:mid;
+      else{ const disc=B*B-4*A*C;
+        if(disc<0) zref=mid; else{ const sq=Math.sqrt(disc),r1=(-B+sq)/(2*A),r2=(-B-sq)/(2*A);
+          zref=(r1>=zlo&&r1<=zhi)?r1:(r2>=zlo&&r2<=zhi)?r2:(Math.abs(r1-mid)<Math.abs(r2-mid)?r1:r2); } } }
+    // re-fit in referenced z so the stored curves are in z-relative-to-focus
+    const zr=good.map(p=>zAbs(p)-zref);
+    const qx=robustQuad(zr,sxN), qy=robustQuad(zr,syN), qpr=robustQuad(zr,good.map(p=>p.pr));
+    calib={ first,last,step,px,zref, qx,qy,qpr,
+            pts:good.map((p,i)=>({z:zr[i],sx:sxN[i],sy:syN[i],pr:p.pr})),
+            zmin:Math.min(...zr), zmax:Math.max(...zr) };
+    srFull=null;                              // hand the SR panel over to the plot
+    drawCalibration();
+    const f=q=>`a=${q.a.toExponential(2)} c=${q.c.toFixed(0)}nm b=${q.b.toFixed(1)}nm`;
+    log(`  σx(z) = a(z−c)²+b :  ${f(qx)}   (${qx.kept}/${qx.total} pts)`);
+    log(`  σy(z) = a(z−c)²+b :  ${f(qy)}   (${qy.kept}/${qy.total} pts)`);
+    log(`  focus (σx=σy) at frame ≈ ${(zref/step+1).toFixed(1)} → z=0. Usable z where the curves separate monotonically.`);
+  }catch(err){ log(`⚠ Calibration failed: ${err.name}: ${err.message}`); setProg(null); }
+  finally{ $('calBtn').disabled=false; $('runBtn').disabled=false; }
+}
+
+// Light-background scatter plot on the SR canvas: σx dark green, σy magenta,
+// vertex-quadratic fits in black (colours per the request).
+function drawCalibration(){
+  if(!calib) return;
+  const d=$('sr'), ctx=d.getContext('2d'), W=d.width, H=d.height;
+  ctx.fillStyle='#f6f8fa'; ctx.fillRect(0,0,W,H);
+  const mL=64,mR=16,mT=40,mB=52, pw=W-mL-mR, ph=H-mT-mB;
+  const zmin=calib.zmin, zmax=calib.zmax;
+  let smax=0; for(const p of calib.pts){ if(p.sx>smax)smax=p.sx; if(p.sy>smax)smax=p.sy; }
+  smax*=1.1; const smin=0;
+  const X=z=>mL+pw*(z-zmin)/Math.max(1e-9,zmax-zmin);
+  const Y=s=>mT+ph*(1-(s-smin)/Math.max(1e-9,smax-smin));
+  // axes + grid
+  ctx.strokeStyle='#c9d1d9'; ctx.fillStyle='#57606a'; ctx.lineWidth=1;
+  ctx.font='11px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  const zt=niceTicks(zmin,zmax,6);
+  for(const z of zt){ const x=X(z); ctx.beginPath(); ctx.moveTo(x,mT); ctx.lineTo(x,mT+ph); ctx.stroke();
+    ctx.fillText(z.toFixed(0), x, mT+ph+6); }
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  const st=niceTicks(smin,smax,6);
+  for(const s of st){ const y=Y(s); ctx.beginPath(); ctx.moveTo(mL,y); ctx.lineTo(mL+pw,y); ctx.stroke();
+    ctx.fillText(s.toFixed(0), mL-8, y); }
+  // z=0 (focus) marker
+  if(zmin<0&&zmax>0){ ctx.strokeStyle='#8b949e'; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(X(0),mT); ctx.lineTo(X(0),mT+ph); ctx.stroke(); ctx.setLineDash([]); }
+  // axis labels + title
+  ctx.fillStyle='#24292f'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.font='12px -apple-system,sans-serif';
+  ctx.fillText('z (nm, 0 = focus)', mL+pw/2, H-14);
+  ctx.save(); ctx.translate(16,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText('PSF width σ (nm)',0,0); ctx.restore();
+  ctx.font='bold 13px -apple-system,sans-serif'; ctx.textAlign='left';
+  ctx.fillText('Astigmatism calibration', mL, 24);
+  // points
+  const GREEN='#0a7d32', MAG='#c81cc8';
+  const dot=(x,y,c)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,2,0,7); ctx.fill(); };
+  for(const p of calib.pts){ dot(X(p.z),Y(p.sx),GREEN); dot(X(p.z),Y(p.sy),MAG); }
+  // fit curves (black)
+  const curve=q=>{ ctx.beginPath();
+    for(let i=0;i<=120;i++){ const z=zmin+(zmax-zmin)*i/120, x=X(z), y=Y(q.at(z));
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); };
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.8; curve(calib.qx); curve(calib.qy);
+  // legend
+  ctx.textAlign='left'; ctx.font='12px -apple-system,sans-serif';
+  ctx.fillStyle=GREEN; ctx.fillText('● σx', mL+pw-120, 20);
+  ctx.fillStyle=MAG;   ctx.fillText('● σy', mL+pw-72, 20);
+  ctx.fillStyle='#000';ctx.fillText('— fit', mL+pw-30, 20);
+  $('srInfo').textContent=`calibration · ${calib.pts.length} points · z-step ${calib.step} nm · scroll the raw panel to inspect frames`;
+}
+// simple "nice" axis ticks
+function niceTicks(lo,hi,n){
+  if(hi<=lo) return [lo]; const raw=(hi-lo)/n, mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const out=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(v); return out;
+}
+
+/* ===========================================================================
    MODULE: pipeline
    =========================================================================== */
 let stopRequested=false;
@@ -2238,7 +2447,7 @@ async function run(){
   // lock the data sources too: swapping the stack mid-run would pull frames
   // out from under the loop.
   $('runBtn').disabled=true; $('loadBtn').disabled=true; $('genBtn').disabled=true;
-  $('stopBtn').disabled=false;
+  $('stopBtn').disabled=false; calib=null;
   let processed=0, stopped=false;
   try{
     const {w,h,n,px}=stack;
@@ -2475,8 +2684,10 @@ function initScrub(){
   const row=$('scrubRow'), s=$('scrub');
   if(stack && stack.n>1){ row.style.display='flex'; s.max=stack.n-1; s.value=0; $('scrubV').textContent=`1/${stack.n}`; }
   else row.style.display='none';
+  if(stack){ $('calLast').value=stack.n; $('calFirst').value=1; }   // default calibration range = whole stack
 }
 $('scrub').addEventListener('input',e=>showFrame(+e.target.value));
+$('calBtn').addEventListener('click',runCalibration);
 // mouse wheel over the raw frame steps through the stack, as an alternative
 // to the slider (which can sit below the fold when the frame is large)
 $('raw').addEventListener('wheel',e=>{
