@@ -1262,6 +1262,7 @@ X.B(E,Y);return E}return J}())
   canvas{width:100%;image-rendering:pixelated;background:#000;border-radius:6px;display:block}
   /* we handle pan/pinch ourselves; stop the browser claiming the gestures */
   canvas#sr{touch-action:none;cursor:grab}
+  canvas#raw{cursor:ns-resize}
   canvas#sr:active{cursor:grabbing}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
@@ -1307,7 +1308,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21a · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.5.0-dev · build 2026-07-21b · proof-of-concept</span></h1>
   <p>Raw frames → band-pass detection → phasor / Gaussian fitting → zoomable super-resolution render. All client-side, no upload.</p>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
@@ -1433,8 +1434,9 @@ X.B(E,Y);return E}return J}())
         <h4>Raw frame <small id="rawInfo">— detected spots overlaid in green</small></h4>
         <canvas id="raw"></canvas>
         <div id="scrubRow" style="display:none;margin-top:8px;align-items:center;gap:10px">
+          <span style="color:var(--muted);font-size:12px">Frame</span>
           <input type="range" id="scrub" min="0" max="0" step="1" value="0" style="flex:1">
-          <span class="val" id="scrubV" style="min-width:96px;text-align:right">1</span>
+          <span class="val" id="scrubV" style="min-width:70px;text-align:right">1</span>
         </div>
       </div>
       <div class="card">
@@ -1445,7 +1447,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21a (phase 5: 3D astigmatism)
+      <div class="log" id="log">webSMLM v0.5.0-dev · build 2026-07-21b (phase 5: 3D astigmatism)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2444,7 +2446,7 @@ $('file').addEventListener('change',async e=>{
     $('rawInfo').textContent=`frame 1/${stack.n}`; initScrub();
     const d=$('sr'); d.getContext('2d').clearRect(0,0,d.width,d.height);
     $('runBtn').disabled=false;
-    log(`Ready to localize (${stack.px} nm/px).`);
+    log(`Ready to localize (${stack.px} nm/px). ${stack.n>1?'Drag the Frame slider (or scroll over the image) to browse the stack.':''}`);
   }catch(err){ log('TIFF load failed: '+err.message); $('loadInfo').textContent='Load failed.'; }
 });
 
@@ -2475,6 +2477,13 @@ function initScrub(){
   else row.style.display='none';
 }
 $('scrub').addEventListener('input',e=>showFrame(+e.target.value));
+// mouse wheel over the raw frame steps through the stack, as an alternative
+// to the slider (which can sit below the fold when the frame is large)
+$('raw').addEventListener('wheel',e=>{
+  if(!stack||stack.n<2) return; e.preventDefault();
+  const s=$('scrub'), v=Math.max(0,Math.min(stack.n-1,(+s.value)+(e.deltaY>0?1:-1)));
+  s.value=v; showFrame(v);
+},{passive:false});
 $('saveBtn').addEventListener('click',exportCSV);
 $('stopBtn').addEventListener('click',()=>{
   if($('stopBtn').disabled) return;
