@@ -1310,7 +1310,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22c · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22d · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1478,7 +1478,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22c
+      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22d
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -1600,11 +1600,17 @@ async function loadTiffFile(file){
     const bps=(hifds[0].t258&&hifds[0].t258[0])||8, spp=(hifds[0].t277&&hifds[0].t277[0])||1;
     const cmpr=(hifds[0].t259&&hifds[0].t259[0])||1;
     const rawBytes=w*h*(bps>>3)*spp, base=(hifds[0].t273&&hifds[0].t273[0])||0;
+    // The on-demand slice path only EXISTS for files too big to load whole (a
+    // 4.89 GB stack, where the browser can't allocate one ArrayBuffer and ImageJ
+    // has written a single IFD because 32-bit offsets can't chain past 4 GB).
+    // Below that size the ordinary whole-file path decodes multi-IFD stacks
+    // correctly AND caches frames in RAM, so it is both correct and faster —
+    // routing e.g. a 147 MB MMStack through slicing was a needless regression.
+    const SLICE_MIN = 1.5*1073741824;              // ~1.5 GB
     // ImageJ big-stack signature: one IFD, then every frame laid out back to
-    // back starting at `base`. The frames must FIT in the file (<=), not end
-    // exactly at EOF — ImageJ often appends ROI/overlay metadata after the
-    // pixel data (a 161-frame calibration stack had 27 kB of trailing tags).
-    if(declared>1 && cmpr===1 && rawBytes>0 && base+declared*rawBytes<=fileSize){
+    // back starting at `base`; frames must FIT in the file (ImageJ appends
+    // ROI/overlay metadata after the pixels, so <= not ==).
+    if(fileSize>SLICE_MIN && declared>1 && cmpr===1 && rawBytes>0 && base+declared*rawBytes<=fileSize){
       const fmt=(hifds[0].t339&&hifds[0].t339[0])||1;
       const isLE=new DataView(head,0,2).getUint16(0,true)===0x4949;
       const px=+$('pxnm').value;
