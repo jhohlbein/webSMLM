@@ -1312,7 +1312,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22k · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22l · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1475,7 +1475,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22k
+      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22l
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2460,13 +2460,15 @@ async function runCalibration(){
     for(let fi=first-1; fi<last; fi++){
       const img=(await stack.getFrames(fi,fi+1))[0];
       const maxima=findMaxima(bandpass(img,w,h,sigma,exactBP),w,h,k,border);
+      const frameLocs=[];
       for(const [cx,cy] of maxima){
         const L=gaussianFitElliptical(img,w,h,cx,cy,win,sigma); if(!L) continue;
         const P=phasorFit(img,w,h,cx,cy,win);
         pts.push({fi,sx:L.sx,sy:L.sy,pr:P.pratio,rrel:L.rrel});
+        frameLocs.push({x:L.x,y:L.y});             // for the raw-frame overlay
       }
       if(performance.now()-lastYield>50){
-        drawRaw(img,w,h,maxima); $('rawInfo').textContent=`calibrating frame ${fi+1}/${last}`;
+        drawRaw(img,w,h,maxima,frameLocs); $('rawInfo').textContent=`calibrating frame ${fi+1}/${last} — ${maxima.length} spots, ${frameLocs.length} fits`;
         setProg(100*(fi-first+1)/(last-first+1)); await tick(); lastYield=performance.now();
       }
     }
@@ -2618,7 +2620,8 @@ async function run(){
     // Workers only pay off when per-frame work clearly exceeds the cost of
     // shipping a frame across the boundary; tiny frames stay single-threaded.
     const useWorkers = pool && pool.length>1 && n>=64 && w*h>=20000;
-    const t0=performance.now(); let lastYield=t0, previewMs=0;
+    const t0=performance.now(); let lastYield=t0, previewMs=0, lastSrMs=0;
+    const SR_PREVIEW_MS=800;   // reconstruction is expensive — preview at most ~1/s (raw stays frequent)
     let tGet=0, tDetect=0, tFit=0, nCand=0;        // Phase 2 instrumentation
 
     if(useWorkers){
@@ -2663,7 +2666,8 @@ async function run(){
                 drawRaw(shown.img,w,h,mx); lastSpots=mx; lastFrame=shown.img; lastFrameIdx=shown.fi;
                 $('rawInfo').textContent=`frame ${shown.fi+1}/${n} — ${mx.length} spots`;
               }
-              if(locs.length){ lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}}; rerender(true); }
+              if(locs.length && performance.now()-lastSrMs>SR_PREVIEW_MS){ lastSrMs=performance.now();
+                lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}}; rerender(true); }
               previewMs+=performance.now()-tp;        // display only, not compute time
             }
             dispatch(wk);
@@ -2707,8 +2711,8 @@ async function run(){
         if(fi % 100 === 0){                        // refresh both views every 100th frame
           drawRaw(img,w,h,maxima); lastSpots=maxima; lastFrame=img; lastFrameIdx=fi;
           $('rawInfo').textContent=`frame ${fi+1}/${n} — ${maxima.length} spots`;
-          if(locs.length){                         // live super-res preview
-            const tp=performance.now();
+          if(locs.length && performance.now()-lastSrMs>SR_PREVIEW_MS){   // live super-res preview, throttled
+            const tp=performance.now(); lastSrMs=performance.now();
             lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}};
             rerender(true);
             previewMs+=performance.now()-tp;       // don't charge preview to compute time
