@@ -13,18 +13,21 @@ technical grounding in the current single-file implementation (`webSMLM.html`).
 
 ## Phase overview & dependencies
 
-| # | Phase | Depends on | Notes |
-|---|-------|-----------|-------|
-| 1 | UI / responsive redesign | — | **☑ Done — shipped in v0.2.0** |
-| 2 | Speed & bottleneck review | — | **☑ Done — 7x / 30x, shipped in v0.3.0** |
-| 3 | CSV export (ThunderSTORM style) | background/photon estimation | Needs phasor mask-based estimation |
-| 4 | Precision estimation via FRC | 3 (localization list) | 3D variant needs Phase 5 |
-| 5 | 3D phasor (astigmatism) | — | **☑ Done — shipped in v0.5.0** |
-| 6 | Drift correction | 3 | **☑ Done (AIM, 2D+3D) — v0.7.0-dev** |
+| # | Phase | Status |
+|---|-------|--------|
+| 1 | UI / responsive redesign | ☑ v0.2.0 |
+| 2 | Speed & bottleneck review | ☑ v0.3.0 (7× / 30×) |
+| 3 | CSV export (ThunderSTORM-style) | ☑ v0.4.0 |
+| 4 | 3D phasor (astigmatism) | ☑ v0.5.0 · *was Phase 5* |
+| 5 | Drift correction (AIM, 2D + 3D) | ☑ v0.7.0 · *was Phase 6* |
+| 6 | Precision via FRC / FSC | ☐ **next** · *was Phase 4* |
+| 7 | Poisson MLE fitting | ☐ later |
+| 8 | Localization filtering | ☐ later |
 
-> **Suggested reordering:** Phase 5 (3D phasor) is a prerequisite for the 3D
-> parts of both Phase 4 (FSC) and Phase 6 (3D drift). Consider promoting it
-> ahead of Phase 4 so the 3D work lands once rather than being retrofitted twice.
+> Phases are numbered in **release order**. Two phases (3D phasor, drift) shipped
+> ahead of FRC, so the original Phase 4 (FRC) is now Phase 6; 3D phasor (was 5)
+> and drift (was 6) shift down to 4 and 5. Commit messages and older release
+> notes keep their original numbers — the *was Phase N* tags map them.
 
 ---
 
@@ -235,14 +238,14 @@ These are correctness/robustness assumptions that also interact with speed:
 
 ---
 
-## Phase 3 — CSV export (ThunderSTORM-compatible)
+## Phase 3 — CSV export (ThunderSTORM-compatible)  ☑ *(v0.4.0)*
 
 **Goal:** "Save localisations" writes a CSV that drops into existing
 ThunderSTORM-based workflows.
 
 - ☐ **Target column set** (ThunderSTORM convention):
   `id, frame, x [nm], y [nm], sigma [nm], intensity [photon], offset [photon],
-  bkgstd [photon], uncertainty [nm]` — plus `z [nm]` once Phase 5 lands.
+  bkgstd [photon], uncertainty [nm]` — plus `z [nm]`, added with Phase 4 (v0.5.0).
 - ☐ **Background and photon-count estimation for phasor.** The phasor fitter
   currently reports `photons` as the plain ROI sum, which conflates signal with
   background and is not a usable `intensity [photon]` value. Implement the
@@ -303,53 +306,36 @@ apples-to-apples, for two independent reasons:
 Useful comparisons are therefore *relative* — distributions, spatial patterns,
 and whether the same structures appear — not absolute per-localization values.
 - ☐ Uncertainty column: use Thompson/Mortensen precision formula from
-  intensity, background and σ_PSF (cross-check against Phase 4's FRC).
+  intensity, background and σ_PSF (cross-check against Phase 6's FRC).
 - ☐ Streaming CSV writer so multi-million-localization exports don't build one
   giant string in memory (`Blob` parts / `File System Access API`).
 
 ---
 
-## Phase 4 — Localization precision via FRC
-
-- ☐ **2D FRC**: split localizations into two statistically independent halves
-  (odd/even frames, or random 50/50), render both, compute the Fourier Ring
-  Correlation curve, and report resolution at the **1/7 threshold**.
-- ☐ **3D FSC** (Fourier Shell Correlation) once Phase 5 provides z.
-- ☐ Report FRC resolution in the stats bar alongside localization count.
-- ☐ **Note on interpretation:** FRC measures *image resolution* (which folds in
-  labelling density and drift), not per-localization precision. Keep the
-  existing **NeNA** reference as the complementary per-localization measure —
-  ideally report both, since disagreement between them is itself diagnostic
-  (e.g. residual drift).
-- ☐ FRC is FFT-heavy; a small self-contained FFT (or WebGPU) will be needed —
-  budget this against the single-file, no-dependency constraint.
-
----
-
-## Phase 5 — 3D phasor (astigmatism)
+## Phase 4 — 3D phasor (astigmatism)  ☑ *(v0.5.0; was Phase 5)*
 
 Implements the 3D half of the pSMLM-3D paper the 2D fitter already follows.
 
-- ☐ **Magnitude ratio → z.** `phasorFit()` already computes the first Fourier
+- ☑ **Magnitude ratio → z.** `phasorFit()` already computes the first Fourier
   coefficients in x and y; their **magnitudes** encode PSF ellipticity under an
   astigmatic (cylindrical lens) PSF. The ratio |F₁ˣ|/|F₁ʸ| is the z observable —
   most of the required computation is already in the function, currently discarded.
-- ☐ **Calibration workflow:** load a bead z-stack, fit magnitude-ratio vs z,
+- ☑ **Calibration workflow:** load a bead z-stack, fit magnitude-ratio vs z,
   store the calibration curve (and allow save/load of calibration as JSON).
-- ☐ UI: astigmatism on/off, calibration import, z colour-coding in the render.
-- ☐ Render: z as colour (depth-coded LUT) over the existing 2D histogram render.
-- ☐ Reference: Martens et al., *J. Chem. Phys.* **148**, 123311 (2018), and the
+- ☑ UI: astigmatism on/off, calibration import, z colour-coding in the render.
+- ☑ Render: z as colour (depth-coded LUT) over the existing 2D histogram render.
+- Reference: Martens et al., *J. Chem. Phys.* **148**, 123311 (2018), and the
   engineered-PSF extension in *Methods* (2020).
 
 ---
 
-## Phase 6 — Drift correction  ☑ *(v0.7.0-dev; 2D + 3D)*
+## Phase 5 — Drift correction  ☑ *(v0.7.0; 2D + 3D; was Phase 6)*
 
 **Method: AIM** (Adaptive Intersection Maximization; Sci. Adv. 2024,
 doi:10.1126/sciadv.adm7765; ref impl. picasso/aim.py). Chosen over RCC because
 it is **point-based** — no image rendering and **no FFT** for the core estimate
 (fits the single-file, no-dependency constraint that RCC/FFT would break, and
-that Phase 4 FRC still has to solve) — and it is **natively 3D** (x/y as a 2D
+that Phase 6 FRC still has to solve) — and it is **natively 3D** (x/y as a 2D
 grid search, z as a separate 1D search), matching the Phasor 3D output.
 
 AIM core: segment localizations in time (~100 frames); for each segment count
@@ -360,15 +346,15 @@ set). Adaptations for webSMLM: **parabola peak fit** for sub-pixel instead of
 Picasso's FFT phase refinement; **linear / Catmull-Rom** interpolation of drift
 between segment centres instead of SciPy cubic spline.
 
-- ☑ **6a — simulated drift** (ground truth): linear total drift over all frames
+- ☑ **5a — simulated drift** (ground truth): linear total drift over all frames
   in a random direction; true per-frame drift stored (`simTrueDrift`) for
-  scoring. *(v0.7.0-dev)*
-- ☑ **6b — AIM 2D**: validated vs. simulated drift (RMS ~3-4 nm). *(v0.7.0-dev)*
-- ☑ **6c — apply + display**: reversible correction (raw kept), drift-vs-time
-  curve, corrected coords drive render + CSV. Progress bar. *(v0.7.0-dev)*
-- ☑ **6d — z drift**: 1-D intersection-max on z. Validated vs. simulated drift
+  scoring. *(v0.7.0)*
+- ☑ **5b — AIM 2D**: validated vs. simulated drift (RMS ~3-4 nm). *(v0.7.0)*
+- ☑ **5c — apply + display**: reversible correction (raw kept), drift-vs-time
+  curve, corrected coords drive render + CSV. Progress bar. *(v0.7.0)*
+- ☑ **5d — z drift**: 1-D intersection-max on z. Validated vs. simulated drift
   (RMS ~6–8 nm at a realistic ~40 nm axial precision; ~18 nm at a pessimistic
-  130 nm). *(v0.7.0-dev)*
+  130 nm). *(v0.7.0)*
   - **Sawtooth fix.** A broad/noisy z intersection peak gave the parabola
     sub-pixel fit a near-zero curvature term, so it flipped to ±0.5-bin offsets
     on alternating segments — a visible sawtooth (reported on the large 3D
@@ -388,16 +374,44 @@ between segment centres instead of SciPy cubic spline.
     clamped and recommends widening the z-calibration range.
 - ☐ Optional **fiducial-based** correction when beads are present (simpler, more
   accurate).
-- ☐ Cross-check: FRC (Phase 4) should measurably improve after correction — an
+- ☐ Cross-check: FRC (Phase 6) should measurably improve after correction — an
   end-to-end validation of both phases.
+
+---
+
+## Phase 6 — Localization precision via FRC / FSC  ☐ *(next; was Phase 4)*
+
+The natural next feature, and well-timed: FRC and drift correction (Phase 5) are
+complementary — resolution should measurably improve after AIM, so FRC doubles
+as an end-to-end validation of the drift work.
+
+- ☐ **2D FRC**: split localizations into two statistically independent halves
+  (**odd/even frames** — temporally interleaved, so it captures drift better
+  than a random 50/50), render both, compute the Fourier Ring Correlation curve,
+  and report resolution at the **1/7 threshold**.
+- ☐ **3D FSC** (Fourier Shell Correlation) — unblocked now that Phase 4 provides
+  z; same idea over spherical shells.
+- ☐ Report FRC resolution in the stats bar alongside localization count.
+- ☐ **Note on interpretation:** FRC measures *image resolution* (which folds in
+  labelling density and drift), not per-localization precision. Keep the
+  existing **NeNA** reference as the complementary per-localization measure —
+  ideally report both, since disagreement between them is itself diagnostic
+  (e.g. residual drift).
+- ☐ **On the FFT.** FRC needs a 2D FFT of the two half-reconstructions. This is
+  *not* a real obstacle to the single-file constraint: a compact radix-2
+  Cooley–Tukey FFT (row/column 1-D passes) is ~40 self-contained lines — no
+  dependency, no WebGPU, no build step. Add a Tukey/Hann window before the
+  transform to suppress edge artefacts, then radially bin the ring correlation.
+- ☐ Validate against the **synthetic generator** (known positions), same harness
+  used for AIM.
 
 ---
 
 ## Cross-cutting considerations
 
 - **Single-file constraint.** The project's identity is one self-contained HTML
-  file with no build step. FFT (Phase 4), worker pools (Phase 2) and calibration
-  I/O (Phase 5) all add bulk. Workers in particular normally want separate files —
+  file with no build step. FFT (Phase 6), worker pools (Phase 2) and calibration
+  I/O (Phase 4) all add bulk. Workers in particular normally want separate files —
   use `Blob`-URL workers to stay single-file. Worth an explicit decision if the
   file grows unwieldy: keep single-file, or add an optional build that bundles.
 - **Validation.** As scientific features land (photon counts, precision, z, drift),
@@ -412,7 +426,7 @@ between segment centres instead of SciPy cubic spline.
   is complete and validated.
 
 
-### Phase 5 — future ideas
+### Phase 4 — future ideas
 - ☐ **3D point-cloud view.** The depth-coded render is a 2D projection: where
   localizations at different z overlap in x/y, the colour blends. An interactive
   rotatable point cloud (orthographic scatter, colour = z) would show the true 3D

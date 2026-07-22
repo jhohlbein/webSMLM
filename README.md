@@ -152,14 +152,17 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
 
 Planned work is tracked in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md):
 
+Phases are numbered in **release order** (so the list reads chronologically;
+the plan keeps *was Phase N* tags mapping the earlier numbering):
+
 1. ~~UI improvements and small-screen support~~ (done in 0.2.0)
 2. ~~Speed review — band-pass bottleneck, Web Worker pool~~ (done in 0.3.0)
 3. ~~CSV export in ThunderSTORM format~~ (done in 0.4.0)
-4. Localization precision via FRC
-5. ~~3D phasor (astigmatism)~~ (done in 0.5.0)
-6. ~~Drift correction (2D, then 3D)~~ (done in 0.7.0 — AIM)
-
-Also on the list: Poisson MLE fitting and localization filtering.
+4. ~~3D phasor (astigmatism)~~ (done in 0.5.0)
+5. ~~Drift correction (2D + 3D, AIM)~~ (done in 0.7.0)
+6. Localization precision via FRC / FSC — **next**
+7. Poisson MLE fitting
+8. Localization filtering
 
 ## Distribution & citation
 
