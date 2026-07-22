@@ -1312,7 +1312,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.7.0-dev · build 2026-07-22u · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.7.0-dev · build 2026-07-22v · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1492,7 +1492,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.7.0-dev · build 2026-07-22u (phase 6: drift correction)
+      <div class="log" id="log">webSMLM v0.7.0-dev · build 2026-07-22v (phase 6: drift correction)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2765,8 +2765,10 @@ let lastDrift=null;                               // last estimated drift (for t
 async function correctDrift(){
   if(!lastResult||!lastResult.locs.length){ log('Run localisations first.'); return; }
   const {locs,px}=lastResult;
+  // span the frames ACTUALLY analysed (present in the localizations), not the
+  // stack length — a stopped run only covers part of the stack, and padding to
+  // stack.n adds empty segments that corrupt the drift estimate.
   let nFrames=0; for(const L of locs) if(L.frame+1>nFrames) nFrames=L.frame+1;
-  if(stack&&stack.n>nFrames) nFrames=stack.n;
   const segF=Math.max(2,+$('driftSeg').value|0), roiNm=Math.max(10,+$('driftRoi').value||120), intD=15;
   $('driftBtn').disabled=true;
   try{
