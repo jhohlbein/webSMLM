@@ -1265,9 +1265,10 @@ X.B(E,Y);return E}return J}())
   canvas#sr{touch-action:none;cursor:grab}
   canvas#raw{cursor:ns-resize}
   canvas#sr:active{cursor:grabbing}
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
-  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-  .stat .n{font-size:20px;font-weight:600;color:var(--accent2);font-variant-numeric:tabular-nums}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;
+    display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .stat .n{font-size:11px;font-weight:700;color:var(--accent2);font-variant-numeric:tabular-nums}
   .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   /* progress track is hidden at rest so it doesn't read as a stray rule */
   .bar{height:6px;background:#21262d;border-radius:3px;overflow:hidden;margin:10px 0;display:none}
@@ -1301,7 +1302,7 @@ X.B(E,Y);return E}return J}())
   }
   @media (max-width:420px){
     .stats{grid-template-columns:1fr 1fr;gap:8px}
-    .stat .n{font-size:17px}
+    .stat .n{font-size:11px}
     .sidebar{padding:14px}
     .modal{padding:18px 16px}
   }
@@ -1309,7 +1310,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22a · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22b · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1342,7 +1343,6 @@ X.B(E,Y);return E}return J}())
         discarded (“streaming”), so memory stays bounded but re-runs re-decode.<br>
         <b>Heap</b> — chunk size for streaming, used only when every frame must go through the TIFF
         decoder. Contiguous ImageJ stacks decode one frame at a time and ignore this.</div></details>
-      <div id="loadInfo" class="hint"></div>
     </div>
 
     <hr class="sep">
@@ -1487,7 +1487,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22a
+      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22b
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -1623,7 +1623,6 @@ async function loadTiffFile(file){
       log(`File: ${declared} frames · ${w}×${h} · ${fmtBytes(fileSize)} on disk`);
       log(`Contiguous ImageJ stack — reading frames on demand; the file is never held in memory.`);
       $('sFrames').textContent=declared;
-      $('loadInfo').textContent=`Sliced: ${declared} frames · ${w}×${h} · ${bps}-bit`;
       const decodeInto=(buf,off,g)=>{
         if(bps===8){ const u=new Uint8Array(buf,off,rawBytes);
           for(let i=0;i<w*h;i++) g[i]=u[i*spp]; return g; }
@@ -1722,9 +1721,9 @@ async function loadTiff(fileBuf, fileSize){
           for(let fi=0; fi<usable; fi++){
             frames[fi]=readFrame(fi);
             if(fi%50===0){ setProg(100*fi/usable);
-              $('loadInfo').textContent=`Loading ${fi+1}/${usable}…`; await tick(); }
+              await tick(); }
           }
-          setProg(null); $('loadInfo').textContent=`Loaded ${usable} frames into memory.`;
+          setProg(null);
           log('  Loaded into memory — re-runs will not re-decode.');
           return makeStack(w,h,usable,px, fi=>frames[fi]);
         }catch(err){
@@ -1733,7 +1732,6 @@ async function loadTiff(fileBuf, fileSize){
         }
       }
       // Random access is O(1) here, so no heaps are needed — decode per frame.
-      $('loadInfo').textContent=`Streaming: ${usable} frames, decoded on demand.`;
       log(`  Exceeds budget — decoding frames on demand (no re-decode penalty: it is a plain byte read).`);
       return makeStack(w,h,usable,px, readFrame);
     }
@@ -1750,7 +1748,6 @@ async function loadTiff(fileBuf, fileSize){
     const chunkMB=Math.max(50,+$('chunkmb').value||500);
     let cf=Math.max(1, Math.floor(chunkMB*1048576/frameBytes));
     log(`${reason} streaming in heaps of ≤${cf} frames (~${fmtBytes(cf*frameBytes)} each).`);
-    $('loadInfo').textContent=`Streaming: ${n} frames, ≤${cf}-frame heaps.`;
     let start=-1, heap=[];
     const build=s=>{ const end=Math.min(n,s+cf), out=[];
       for(let i=s;i<end;i++){ const ifd=ifds[i]; UTIF.decodeImage(fileBuf, ifd);
@@ -1776,9 +1773,9 @@ async function loadTiff(fileBuf, fileSize){
         frames[fi]=ifdToFloat(ifds[fi],w,h);
         ifds[fi].data=null;                           // free raw bytes as we go
         if(fi%20===0){ setProg(100*fi/n);
-          $('loadInfo').textContent=`Loading ${fi+1}/${n} (${fmtBytes(fi*frameBytes)})…`; await tick(); }
+          await tick(); }
       }
-      setProg(null); $('loadInfo').textContent=`Loaded ${n} frames into memory.`;
+      setProg(null);
       log('Loaded into memory — re-runs will not re-decode.');
       return makeStack(w,h,n,px, fi=>frames[fi]);
     }catch(err){
@@ -2213,7 +2210,7 @@ function rerender(keepView){
 /* ===========================================================================
    VIEW helpers
    =========================================================================== */
-function drawRaw(frame,w,h,spots){
+function drawRaw(frame,w,h,spots,locs){
   const cv=$('raw'); cv.width=w; cv.height=h;
   const ctx=cv.getContext('2d'), im=ctx.createImageData(w,h);
   let mn=Infinity,mx=-Infinity; for(const v of frame){if(v<mn)mn=v;if(v>mx)mx=v;}
@@ -2222,6 +2219,8 @@ function drawRaw(frame,w,h,spots){
   ctx.putImageData(im,0,0);
   if(spots){ ctx.strokeStyle='#3fb950'; ctx.lineWidth=0.6;
     for(const [x,y] of spots) ctx.strokeRect(x-2.5,y-2.5,5,5); }
+  if(locs&&locs.length){ ctx.fillStyle='#ff3bff';        // accepted localizations, sub-pixel
+    for(const L of locs){ ctx.beginPath(); ctx.arc(L.x,L.y,0.8,0,7); ctx.fill(); } }
 }
 
 /* ===========================================================================
@@ -2636,7 +2635,7 @@ async function run(){
                 drawRaw(shown.img,w,h,mx); lastSpots=mx; lastFrame=shown.img;
                 $('rawInfo').textContent=`frame ${shown.fi+1}/${n} — ${mx.length} spots`;
               }
-              if(locs.length){ lastResult={locs,w,h,px,mag:+$('mag').value}; rerender(true); }
+              if(locs.length){ lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}}; rerender(true); }
               previewMs+=performance.now()-tp;        // display only, not compute time
             }
             dispatch(wk);
@@ -2682,7 +2681,7 @@ async function run(){
           $('rawInfo').textContent=`frame ${fi+1}/${n} — ${maxima.length} spots`;
           if(locs.length){                         // live super-res preview
             const tp=performance.now();
-            lastResult={locs,w,h,px,mag:+$('mag').value};
+            lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}};
             rerender(true);
             previewMs+=performance.now()-tp;       // don't charge preview to compute time
           }
@@ -2703,7 +2702,7 @@ async function run(){
     const dt=performance.now()-t0-previewMs;       // localization work only
     const per=Math.max(1,processed);
 
-    lastResult={locs,w,h,px,mag:+$('mag').value};
+    lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}};
     rerender(true);
 
     $('saveBtn').disabled = locs.length===0;
@@ -2768,7 +2767,6 @@ $('genBtn').addEventListener('click',async()=>{
     const d=$('sr'); d.getContext('2d').clearRect(0,0,d.width,d.height); drawView();
     drawRaw((await stack.getFrames(0,1))[0],stack.w,stack.h,null);
     $('rawInfo').textContent=`frame 1/${stack.n}`; initScrub(); $('sFrames').textContent=stack.n;
-    $('loadInfo').textContent=`Simulated: ${stack.n} frames · ${stack.w}×${stack.h} · ${stack.px} nm/px`;
     $('runBtn').disabled=false;
     log(`Stack ready: ${stack.n} frames · ${stack.w}×${stack.h}. Click “Run localisations”.`);
   }catch(err){
@@ -2789,7 +2787,7 @@ $('file').addEventListener('change',async e=>{
     const d=$('sr'); d.getContext('2d').clearRect(0,0,d.width,d.height);
     $('runBtn').disabled=false;
     log(`Ready to localize (${stack.px} nm/px). ${stack.n>1?'Drag the Frame slider (or scroll over the image) to browse the stack.':''}`);
-  }catch(err){ log('TIFF load failed: '+err.message); $('loadInfo').textContent='Load failed.'; }
+  }catch(err){ log('TIFF load failed: '+err.message); }
 });
 
 $('runBtn').addEventListener('click',run);
@@ -2798,6 +2796,14 @@ $('runBtn').addEventListener('click',run);
 // coalesced so dragging over a sliced (on-demand) stack does not queue a read
 // per intermediate value.
 let scrubBusy=false, scrubPending=null;
+// accepted localizations for one frame, indexed lazily on first use
+function locsForFrame(fi){
+  if(!lastResult) return null;
+  if(!lastResult.byFrame){ const m=new Map();
+    for(const L of lastResult.locs){ let a=m.get(L.frame); if(!a){a=[];m.set(L.frame,a);} a.push(L); }
+    lastResult.byFrame=m; }
+  return lastResult.byFrame.get(fi)||[];
+}
 async function showFrame(i){
   if(!stack) return;
   i=Math.max(0,Math.min(stack.n-1,i|0));
@@ -2806,8 +2812,15 @@ async function showFrame(i){
   scrubBusy=true;
   try{
     const img=(await stack.getFrames(i,i+1))[0];
-    drawRaw(img,stack.w,stack.h,null);
-    $('rawInfo').textContent=`frame ${i+1}/${stack.n}`;
+    // if a result exists (same stack), re-detect boxes and overlay its locs
+    let spots=null, locsF=null;
+    if(lastResult && lastResult.det && lastResult.w===stack.w && lastResult.h===stack.h){
+      const d=lastResult.det;
+      spots=findMaxima(bandpass(img,stack.w,stack.h,d.sigma,d.exactBP),stack.w,stack.h,d.k,d.border);
+      locsF=locsForFrame(i);
+    }
+    drawRaw(img,stack.w,stack.h,spots,locsF);
+    $('rawInfo').textContent=`frame ${i+1}/${stack.n}`+(locsF?` — ${spots.length} spots, ${locsF.length} locs`:'');
   }catch(_){}
   scrubBusy=false;
   if(scrubPending!==null && scrubPending!==i){ const nx=scrubPending; scrubPending=null; showFrame(nx); }
