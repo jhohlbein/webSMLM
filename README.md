@@ -28,9 +28,11 @@ walk-through of every step.
 
 - **Loads** multi-frame TIFF stacks (8/16/32-bit, little- or big-endian,
   uncompressed or deflate/LZW-compressed). 16-bit depth is preserved.
-- **Handles very large stacks.** Contiguous ImageJ stacks (a single directory
-  entry with frames laid out after it, as written above ~4 GB) are read frame by
-  frame with `File.slice()`, so the file is never held in memory. A 4.89 GB /
+- **Handles very large stacks.** Files too big to hold in memory are read frame
+  by frame with `File.slice()`, so the file is never fully loaded. Contiguous
+  ImageJ stacks (single directory entry, frames laid out after it — as written
+  above ~4 GB) are indexed arithmetically; **multi-IFD stacks (e.g. multi-GB
+  Micro-Manager MMStacks)** are indexed by walking the IFD chain. A 4.89 GB /
   40,000-frame stack processes in ~24 s.
 - **Memory-aware loading**: caches frames in RAM within a configurable budget,
   or streams large stacks in bounded heaps (the pattern that also enables
