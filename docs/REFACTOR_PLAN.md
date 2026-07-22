@@ -15,23 +15,30 @@ technical grounding in the current single-file implementation (`webSMLM.html`).
 
 ---
 
-## Phase overview & dependencies
+## Roadmap (by version)
 
-| # | Phase | Status |
-|---|-------|--------|
-| 1 | UI / responsive redesign | ☑ v0.2.0 |
-| 2 | Speed & bottleneck review | ☑ v0.3.0 (7× / 30×) |
-| 3 | CSV export (ThunderSTORM-style) | ☑ v0.4.0 |
-| 4 | 3D phasor (astigmatism) | ☑ v0.5.0 · *was Phase 5* |
-| 5 | Drift correction (AIM, 2D + 3D) | ☑ v0.7.0 · *was Phase 6* |
-| 6 | Precision via FRC / FSC | ☐ **next** · *was Phase 4* |
-| 7 | Poisson MLE fitting | ☐ later |
-| 8 | Localization filtering | ☐ later |
+Going forward we track work by **version number**, not phase number — the phase
+scheme was executed out of order and several releases never mapped to a phase
+(see [`../CHANGELOG.md`](../CHANGELOG.md)). The design sections below retain
+their historical "Phase N" headings as a record; new work is version-keyed.
 
-> Phases are numbered in **release order**. Two phases (3D phasor, drift) shipped
-> ahead of FRC, so the original Phase 4 (FRC) is now Phase 6; 3D phasor (was 5)
-> and drift (was 6) shift down to 4 and 5. Commit messages and older release
-> notes keep their original numbers — the *was Phase N* tags map them.
+**Shipped** (headline features; full list in the changelog):
+
+| Version | Feature |
+|---|---|
+| v0.2.0 | UI / responsive redesign |
+| v0.3.0 | Speed & bottleneck review (~7× / ~30×) |
+| v0.4.0 | CSV export (ThunderSTORM-style) |
+| v0.5.0 | 3D phasor (astigmatism) |
+| v0.6.0–0.6.x | UI overhaul & pipeline polish; large multi-IFD stacks; TIFF fixes |
+| v0.7.0 | Drift correction (AIM, 2D + 3D) |
+
+**Next:**
+
+| Version | Plan |
+|---|---|
+| **v0.8.0** | Localization precision — **FRC / FSC** and/or **NeNA** (see below) |
+| later | Poisson MLE fitting · localization filtering · 3D point-cloud view |
 
 ---
 
@@ -310,7 +317,7 @@ apples-to-apples, for two independent reasons:
 Useful comparisons are therefore *relative* — distributions, spatial patterns,
 and whether the same structures appear — not absolute per-localization values.
 - ☐ Uncertainty column: use Thompson/Mortensen precision formula from
-  intensity, background and σ_PSF (cross-check against Phase 6's FRC).
+  intensity, background and σ_PSF (cross-check against FRC/NeNA in v0.8.0).
 - ☐ Streaming CSV writer so multi-million-localization exports don't build one
   giant string in memory (`Blob` parts / `File System Access API`).
 
@@ -339,7 +346,7 @@ Implements the 3D half of the pSMLM-3D paper the 2D fitter already follows.
 doi:10.1126/sciadv.adm7765; ref impl. picasso/aim.py). Chosen over RCC because
 it is **point-based** — no image rendering and **no FFT** for the core estimate
 (fits the single-file, no-dependency constraint that RCC/FFT would break, and
-that Phase 6 FRC still has to solve) — and it is **natively 3D** (x/y as a 2D
+that v0.8.0's FRC still has to solve) — and it is **natively 3D** (x/y as a 2D
 grid search, z as a separate 1D search), matching the Phasor 3D output.
 
 AIM core: segment localizations in time (~100 frames); for each segment count
@@ -378,29 +385,38 @@ between segment centres instead of SciPy cubic spline.
     clamped and recommends widening the z-calibration range.
 - ☐ Optional **fiducial-based** correction when beads are present (simpler, more
   accurate).
-- ☐ Cross-check: FRC (Phase 6) should measurably improve after correction — an
-  end-to-end validation of both phases.
+- ☐ Cross-check: FRC (v0.8.0) should measurably improve after correction — an
+  end-to-end validation of both features.
 
 ---
 
-## Phase 6 — Localization precision via FRC / FSC  ☐ *(next; was Phase 4)*
+## v0.8.0 (next) — localization precision: FRC / FSC and/or NeNA
 
-The natural next feature, and well-timed: FRC and drift correction (Phase 5) are
-complementary — resolution should measurably improve after AIM, so FRC doubles
-as an end-to-end validation of the drift work.
+Well-timed after drift correction (v0.7.0): resolution should measurably improve
+after AIM, so FRC doubles as an end-to-end validation of the drift work.
 
-- ☐ **2D FRC**: split localizations into two statistically independent halves
+**Why not a per-localization formula?** The **phasor** fitter is fast and
+non-iterative but gives **no meaningful per-localization precision** — there is
+no CRLB / Thompson–Larson–Webb-style uncertainty as there is for a Gaussian-MLE
+fit, and its photon/background estimates are crude. So for precision on
+phasor localizations, prefer **empirical / resolution** measures:
+
+- ☐ **NeNA** — empirical per-localization precision from nearest-neighbour
+  analysis of the localization list (data-driven, no PSF model). The most
+  honest single-number precision for the phasor path; a good first deliverable.
+- ☐ **2D FRC** — split localizations into two statistically independent halves
   (**odd/even frames** — temporally interleaved, so it captures drift better
   than a random 50/50), render both, compute the Fourier Ring Correlation curve,
   and report resolution at the **1/7 threshold**.
-- ☐ **3D FSC** (Fourier Shell Correlation) — unblocked now that Phase 4 provides
+- ☐ **3D FSC** (Fourier Shell Correlation) — unblocked now that v0.5.0 provides
   z; same idea over spherical shells.
-- ☐ Report FRC resolution in the stats bar alongside localization count.
+- ☐ Report the precision/resolution figure(s) in the stats bar alongside the
+  localization count.
 - ☐ **Note on interpretation:** FRC measures *image resolution* (which folds in
-  labelling density and drift), not per-localization precision. Keep the
-  existing **NeNA** reference as the complementary per-localization measure —
-  ideally report both, since disagreement between them is itself diagnostic
-  (e.g. residual drift).
+  labelling density and drift); NeNA measures *per-localization* precision.
+  Ideally report both — disagreement between them is itself diagnostic (e.g.
+  residual drift). The app's existing exported `uncertainty [nm]` column
+  (Thompson/Larson/Webb) is only meaningful on the Gaussian-fit path.
 - ☐ **On the FFT.** FRC needs a 2D FFT of the two half-reconstructions. This is
   *not* a real obstacle to the single-file constraint: a compact radix-2
   Cooley–Tukey FFT (row/column 1-D passes) is ~40 self-contained lines — no
@@ -414,14 +430,15 @@ as an end-to-end validation of the drift work.
 ## Cross-cutting considerations
 
 - **Single-file constraint.** The project's identity is one self-contained HTML
-  file with no build step. FFT (Phase 6), worker pools (Phase 2) and calibration
-  I/O (Phase 4) all add bulk. Workers in particular normally want separate files —
+  file with no build step. FFT (FRC, v0.8.0), worker pools and calibration I/O
+  all add bulk. Workers in particular normally want separate files —
   use `Blob`-URL workers to stay single-file. Worth an explicit decision if the
   file grows unwieldy: keep single-file, or add an optional build that bundles.
 - **Validation.** As scientific features land (photon counts, precision, z, drift),
   the synthetic generator becomes the natural ground-truth harness — it already
   knows true emitter positions. Consider extending it to emit known z and known
-  drift so Phases 4–6 can be validated quantitatively rather than by eye.
+  drift so the 3D, drift and precision work can be validated quantitatively
+  rather than by eye.
 - **Regression safety.** There are currently no automated tests. Even a minimal
   headless check (fixed-seed synthetic stack → assert localization count and
   RMS error within bounds) would protect the numerics through this refactor.

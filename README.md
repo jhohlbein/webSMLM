@@ -150,22 +150,20 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
 
 ## Roadmap
 
-Planned work is tracked in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md):
+Past releases are logged in [`CHANGELOG.md`](CHANGELOG.md); planned work is
+tracked by **version** in [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md).
 
-Past releases are logged in [`CHANGELOG.md`](CHANGELOG.md) (not every release
-maps to a numbered phase — e.g. the 0.6.x series was UI / robustness polish).
-Phases below are numbered in **release order** (so the list reads
-chronologically; the plan keeps *was Phase N* tags mapping the earlier
-numbering):
+**Shipped:** UI redesign (0.2.0) · speed review (0.3.0) · CSV export (0.4.0) ·
+3D phasor / astigmatism (0.5.0) · UI overhaul & large-stack loading (0.6.x) ·
+drift correction (AIM, 0.7.0).
 
-1. ~~UI improvements and small-screen support~~ (done in 0.2.0)
-2. ~~Speed review — band-pass bottleneck, Web Worker pool~~ (done in 0.3.0)
-3. ~~CSV export in ThunderSTORM format~~ (done in 0.4.0)
-4. ~~3D phasor (astigmatism)~~ (done in 0.5.0)
-5. ~~Drift correction (2D + 3D, AIM)~~ (done in 0.7.0)
-6. Localization precision via FRC / FSC — **next**
-7. Poisson MLE fitting
-8. Localization filtering
+**Next:**
+
+- **v0.8.0** — localization precision: **FRC / FSC** and/or **NeNA**. (Phasor
+  fitting gives no meaningful per-localization uncertainty, so precision is
+  reported empirically via NeNA and/or as image resolution via FRC, rather than
+  a per-localization formula.)
+- **Later** — Poisson MLE fitting · localization filtering · 3D point-cloud view.
 
 ## Distribution & citation
 
