@@ -1262,9 +1262,8 @@ X.B(E,Y);return E}return J}())
   .card h4 small{color:var(--muted);font-weight:400}
   canvas{width:100%;image-rendering:pixelated;background:#000;border-radius:6px;display:block}
   /* we handle pan/pinch ourselves; stop the browser claiming the gestures */
-  canvas#sr{touch-action:none;cursor:grab}
-  canvas#raw{cursor:ns-resize}
-  canvas#sr:active{cursor:grabbing}
+  canvas#sr,canvas#raw{touch-action:none;cursor:grab}
+  canvas#sr:active,canvas#raw:active{cursor:grabbing}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;
     display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -1310,7 +1309,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22e · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22f · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1478,7 +1477,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22e
+      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22f
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2051,7 +2050,6 @@ function phasorFit(img,w,h,cx,cy,win){
    =========================================================================== */
 let srFull=null;                       // offscreen full-res reconstruction
 const view={zoom:1,cx:0,cy:0};         // display px per srFull px; center in srFull coords
-let dragging=null;
 
 /* -- colour maps -------------------------------------------------------------
    "fire" reproduces the original black→red→yellow→white ramp. "inferno" and
@@ -2204,9 +2202,29 @@ function rerender(keepView){
 /* ===========================================================================
    VIEW helpers
    =========================================================================== */
+// The raw panel has its own zoom/pan view (like the SR panel). drawRaw renders
+// the frame + overlays into an offscreen buffer at native resolution; the
+// visible canvas shows it through rawView. Frame stepping is the slider's job.
+let rawFull=null;
+const rawView={zoom:1,cx:0,cy:0};
+function fitRawZoom(){ const d=$('raw'); return rawFull?Math.min(d.width/rawFull.width,d.height/rawFull.height):1; }
+function fitRawView(){ if(!rawFull) return; rawView.zoom=fitRawZoom(); rawView.cx=rawFull.width/2; rawView.cy=rawFull.height/2; }
+function clampRawView(){ if(!rawFull) return;
+  const d=$('raw'), hw=d.width/rawView.zoom/2, hh=d.height/rawView.zoom/2;
+  rawView.cx = 2*hw>=rawFull.width  ? rawFull.width/2  : Math.max(hw, Math.min(rawFull.width-hw, rawView.cx));
+  rawView.cy = 2*hh>=rawFull.height ? rawFull.height/2 : Math.max(hh, Math.min(rawFull.height-hh, rawView.cy)); }
+function drawRawView(){
+  const d=$('raw'), ctx=d.getContext('2d'), DW=d.width, DH=d.height;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,DW,DH); if(!rawFull) return;
+  ctx.imageSmoothingEnabled=false;
+  const sw=DW/rawView.zoom, sh=DH/rawView.zoom;
+  ctx.drawImage(rawFull, rawView.cx-sw/2, rawView.cy-sh/2, sw,sh, 0,0,DW,DH);
+}
 function drawRaw(frame,w,h,spots,locs){
-  const cv=$('raw'); cv.width=w; cv.height=h;
-  const ctx=cv.getContext('2d'), im=ctx.createImageData(w,h);
+  if(!rawFull) rawFull=document.createElement('canvas');
+  const sizeChanged = rawFull.width!==w || rawFull.height!==h;
+  if(sizeChanged){ rawFull.width=w; rawFull.height=h; }
+  const ctx=rawFull.getContext('2d'), im=ctx.createImageData(w,h);
   let mn=Infinity,mx=-Infinity; for(const v of frame){if(v<mn)mn=v;if(v>mx)mx=v;}
   for(let i=0;i<frame.length;i++){ const t=mx>mn?(frame[i]-mn)/(mx-mn):0, g=t*255;
     im.data[i*4]=g;im.data[i*4+1]=g;im.data[i*4+2]=g;im.data[i*4+3]=255; }
@@ -2215,6 +2233,8 @@ function drawRaw(frame,w,h,spots,locs){
     for(const [x,y] of spots) ctx.strokeRect(x-2.5,y-2.5,5,5); }
   if(locs&&locs.length){ ctx.fillStyle='#ff3bff';        // accepted localizations, sub-pixel
     for(const L of locs){ ctx.beginPath(); ctx.arc(L.x,L.y,0.8,0,7); ctx.fill(); } }
+  if(sizeChanged || !rawView.zoom) fitRawView();          // refit only on a new frame size; keep zoom while scrubbing
+  clampRawView(); drawRawView();
 }
 
 /* ===========================================================================
@@ -2878,13 +2898,6 @@ $('calFile').addEventListener('change',async e=>{
   }catch(err){ log('Calibration load failed: '+err.message); }
   e.target.value='';
 });
-// mouse wheel over the raw frame steps through the stack, as an alternative
-// to the slider (which can sit below the fold when the frame is large)
-$('raw').addEventListener('wheel',e=>{
-  if(!stack||stack.n<2) return; e.preventDefault();
-  const s=$('scrub'), v=Math.max(0,Math.min(stack.n-1,(+s.value)+(e.deltaY>0?1:-1)));
-  s.value=v; showFrame(v);
-},{passive:false});
 $('saveBtn').addEventListener('click',exportCSV);
 $('stopBtn').addEventListener('click',()=>{
   if($('stopBtn').disabled) return;
@@ -2904,79 +2917,46 @@ $('zmax').addEventListener('input',()=>{ if(lastResult) rerender(true); });
    and touch share one path: drag/1-finger = pan, wheel/2-finger pinch = zoom,
    double-click or double-tap = reset.
    --------------------------------------------------------------------------- */
-const sr=$('sr');
-// client coords -> canvas backing-store coords
-const toCanvas=(cx_,cy_)=>{ const r=sr.getBoundingClientRect();
-  return {x:(cx_-r.left)*sr.width/r.width, y:(cy_-r.top)*sr.height/r.height}; };
-// canvas coords -> point in the srFull reconstruction
-const toSr=(px,py)=>{ const sw=sr.width/view.zoom, sh=sr.height/view.zoom;
-  return {x:view.cx+sw*(px/sr.width-0.5), y:view.cy+sh*(py/sr.height-0.5)}; };
-// zoom to `z`, keeping the reconstruction point under (px,py) pinned
-function zoomAbout(px,py,z){
-  const u=toSr(px,py);
-  view.zoom=Math.max(fitZoom(), Math.min(fitZoom()*60, z));
-  const sw=sr.width/view.zoom, sh=sr.height/view.zoom;
-  view.cx=u.x - sw*(px/sr.width-0.5); view.cy=u.y - sh*(py/sr.height-0.5);
-  clampView(); drawView();
+// Generic pan/zoom for a canvas backed by an offscreen "full" image. Used by
+// both the SR reconstruction and the raw frame. nav supplies the state and the
+// fit/clamp/draw callbacks so the two panels share one interaction model.
+function makeNavigator(cv, nav){
+  const toCv=(cx_,cy_)=>{ const r=cv.getBoundingClientRect();
+    return {x:(cx_-r.left)*cv.width/r.width, y:(cy_-r.top)*cv.height/r.height}; };
+  const toFull=(px,py)=>{ const v=nav.view, sw=cv.width/v.zoom, sh=cv.height/v.zoom;
+    return {x:v.cx+sw*(px/cv.width-0.5), y:v.cy+sh*(py/cv.height-0.5)}; };
+  function zoomAbout(px,py,z){ const v=nav.view, u=toFull(px,py), fz=nav.fitZoom();
+    v.zoom=Math.max(fz, Math.min(fz*(nav.maxZoom||60), z));
+    const sw=cv.width/v.zoom, sh=cv.height/v.zoom;
+    v.cx=u.x-sw*(px/cv.width-0.5); v.cy=u.y-sh*(py/cv.height-0.5);
+    nav.clamp(); nav.draw(); }
+  const ptrs=new Map(); let pinch=null, lastTap=0, dragging=null;
+  const midpoint=()=>{ const p=[...ptrs.values()]; return {x:(p[0].x+p[1].x)/2, y:(p[0].y+p[1].y)/2}; };
+  const spread=()=>{ const p=[...ptrs.values()]; return Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y); };
+  cv.addEventListener('wheel',e=>{ if(!nav.full()) return; e.preventDefault();
+    const p=toCv(e.clientX,e.clientY); zoomAbout(p.x,p.y, nav.view.zoom*Math.exp(-e.deltaY*0.0015)); },{passive:false});
+  cv.addEventListener('pointerdown',e=>{ if(!nav.full()) return;
+    cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size===1){ const now=performance.now();
+      if(now-lastTap<300){ nav.fit(); nav.draw(); lastTap=0; return; } lastTap=now;
+      dragging={x:e.clientX,y:e.clientY,cx:nav.view.cx,cy:nav.view.cy}; pinch=null;
+    }else if(ptrs.size===2){ dragging=null; const m=toCv(midpoint().x,midpoint().y);
+      pinch={d0:spread(), z0:nav.view.zoom, px:m.x, py:m.y}; } });
+  cv.addEventListener('pointermove',e=>{ if(!nav.full()||!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); e.preventDefault();
+    if(pinch && ptrs.size>=2){ const d=spread(); if(d<=0) return; zoomAbout(pinch.px,pinch.py,pinch.z0*(d/pinch.d0)); }
+    else if(dragging && ptrs.size===1){ const r=cv.getBoundingClientRect(), v=nav.view,
+      sw=cv.width/v.zoom, sh=cv.height/v.zoom;
+      v.cx=dragging.cx-(e.clientX-dragging.x)/r.width*sw; v.cy=dragging.cy-(e.clientY-dragging.y)/r.height*sh;
+      nav.clamp(); nav.draw(); } });
+  const endPtr=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null;
+    if(ptrs.size===0) dragging=null;
+    else if(ptrs.size===1){ const p=[...ptrs.values()][0]; dragging={x:p.x,y:p.y,cx:nav.view.cx,cy:nav.view.cy}; } };
+  cv.addEventListener('pointerup',endPtr); cv.addEventListener('pointercancel',endPtr);
+  cv.addEventListener('dblclick',()=>{ if(nav.full()){ nav.fit(); nav.draw(); } });
 }
-
-sr.addEventListener('wheel',e=>{
-  if(!srFull) return; e.preventDefault();
-  const p=toCanvas(e.clientX,e.clientY);
-  zoomAbout(p.x,p.y, view.zoom*Math.exp(-e.deltaY*0.0015));
-},{passive:false});
-
-const ptrs=new Map();                       // active pointers, by pointerId
-let pinch=null, lastTap=0;
-const midpoint=()=>{ const p=[...ptrs.values()];
-  return {x:(p[0].x+p[1].x)/2, y:(p[0].y+p[1].y)/2}; };
-const spread=()=>{ const p=[...ptrs.values()];
-  return Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y); };
-
-sr.addEventListener('pointerdown',e=>{
-  if(!srFull) return;
-  sr.setPointerCapture(e.pointerId);
-  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(ptrs.size===1){
-    const now=performance.now();
-    if(now-lastTap<300){ fitView(); drawView(); lastTap=0; return; }   // double-tap resets
-    lastTap=now;
-    dragging={x:e.clientX,y:e.clientY,cx:view.cx,cy:view.cy}; pinch=null;
-  }else if(ptrs.size===2){
-    dragging=null;
-    const m=toCanvas(midpoint().x,midpoint().y);
-    pinch={d0:spread(), z0:view.zoom, px:m.x, py:m.y};
-  }
-});
-
-sr.addEventListener('pointermove',e=>{
-  if(!srFull||!ptrs.has(e.pointerId)) return;
-  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  e.preventDefault();
-  if(pinch && ptrs.size>=2){
-    const d=spread(); if(d<=0) return;
-    zoomAbout(pinch.px, pinch.py, pinch.z0*(d/pinch.d0));
-  }else if(dragging && ptrs.size===1){
-    const r=sr.getBoundingClientRect();
-    const sw=sr.width/view.zoom, sh=sr.height/view.zoom;
-    view.cx=dragging.cx-(e.clientX-dragging.x)/r.width*sw;
-    view.cy=dragging.cy-(e.clientY-dragging.y)/r.height*sh;
-    clampView(); drawView();
-  }
-});
-
-const endPtr=e=>{
-  ptrs.delete(e.pointerId);
-  if(ptrs.size<2) pinch=null;
-  if(ptrs.size===0) dragging=null;
-  else if(ptrs.size===1){                    // one finger lifted mid-pinch → resume panning
-    const p=[...ptrs.values()][0];
-    dragging={x:p.x,y:p.y,cx:view.cx,cy:view.cy};
-  }
-};
-sr.addEventListener('pointerup',endPtr);
-sr.addEventListener('pointercancel',endPtr);
-sr.addEventListener('dblclick',()=>{ if(srFull){ fitView(); drawView(); } });   // reset zoom
+makeNavigator($('sr'),  {full:()=>srFull,  view,    fitZoom, fit:fitView, clamp:clampView, draw:drawView, maxZoom:60});
+makeNavigator($('raw'), {full:()=>rawFull, view:rawView, fitZoom:fitRawZoom, fit:fitRawView, clamp:clampRawView, draw:drawRawView, maxZoom:40});
 
 // help modal — wire after full DOM parse (the modal markup follows this script,
 // so its elements don't exist yet at first execution).
