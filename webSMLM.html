@@ -1243,9 +1243,12 @@ X.B(E,Y);return E}return J}())
   details.sim>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:12px;
     padding:5px 0;user-select:none}
   details.sim>summary::-webkit-details-marker{display:none}
-  details.sim>summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
-  details.sim[open]>summary::before{content:'▾ '}
+  details.sim>summary::before{content:'▸';display:inline-block;margin-right:8px;transition:transform .15s}
+  details.sim[open]>summary::before{content:'▾'}
+  /* trailing hint that the row expands to more options */
+  details.sim>summary::after{content:' ⋯';color:var(--accent);opacity:.8;font-weight:700}
   details.sim>summary:hover{color:var(--fg)}
+  details.sim>summary:hover::after{opacity:1}
   details.info{margin:6px 0 2px}
   /* right-aligned so it reads as a secondary info toggle, not an expandable panel */
   details.info>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:11px;
@@ -1309,7 +1312,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22j · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.5.1-dev · build 2026-07-22k · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1333,12 +1336,6 @@ X.B(E,Y);return E}return J}())
       <div class="bar" id="bar"><i id="prog"></i></div>
       <input type="file" id="file" accept=".tif,.tiff" hidden>
       <input type="file" id="setFile" accept=".json" hidden>
-      <details class="sim" id="simBox">
-        <summary>Simulation settings</summary>
-        <label class="row">Frames <input type="number" id="frames" min="50" max="800" step="50" value="300" class="num"></label>
-        <label class="row">Blink density <input type="number" id="dens" min="0.003" max="0.04" step="0.001" value="0.010" class="num"></label>
-        <label class="row">Photons <input type="number" id="phot" min="200" max="2500" step="50" value="900" class="num"></label>
-      </details>
       <details class="sim" id="memBox">
         <summary>Memory &amp; streaming</summary>
         <label class="row">Memory budget (GB) <input type="number" id="memgb" value="3" min="0.5" max="8" step="0.5" class="num"></label>
@@ -1348,6 +1345,31 @@ X.B(E,Y);return E}return J}())
         discarded (“streaming”), so memory stays bounded but re-runs re-decode.<br>
         <b>Heap</b> — chunk size for streaming, used only when every frame must go through the TIFF
         decoder. Contiguous ImageJ stacks decode one frame at a time and ignore this.</div>
+      </details>
+      <details class="sim" id="simBox">
+        <summary>Simulation settings</summary>
+        <label class="row">Frames <input type="number" id="frames" min="50" max="800" step="50" value="300" class="num"></label>
+        <label class="row">Blink density <input type="number" id="dens" min="0.003" max="0.04" step="0.001" value="0.010" class="num"></label>
+        <label class="row">Photons <input type="number" id="phot" min="200" max="2500" step="50" value="900" class="num"></label>
+      </details>
+      <details class="sim" id="calibBox">
+        <summary>3D astigmatism calibration</summary>
+        <label class="row" style="margin-top:6px">First frame
+          <input type="number" id="calFirst" value="1" min="1" step="1" class="num"></label>
+        <label class="row">Last frame
+          <input type="number" id="calLast" value="1" min="1" step="1" class="num"></label>
+        <label class="row">z-step (nm)
+          <input type="number" id="calStep" value="10" min="0.1" step="1" class="num"></label>
+        <label class="row">z=0 ref frame (0=auto)
+          <input type="number" id="calRef" value="0" min="0" step="1" class="num"></label>
+        <div class="btnrow runrow">
+          <button class="primary" id="calBtn">Calibrate ▶</button>
+          <button id="calSaveBtn" disabled title="Save the calibration curves as JSON">Save calib.</button>
+        </div>
+        <details class="info"><summary>…further info…</summary>
+          <div class="hint">Load a bead z-stack (stage scanned through focus). Detects every spot per
+          frame, fits an elliptical Gaussian → σ_x / σ_y vs z, and fits σ = a(z−c)² + b to each.
+          Uses the detection settings above. Crop the range to ~±500 nm around focus for a good fit.</div></details>
       </details>
     </div>
 
@@ -1378,30 +1400,6 @@ X.B(E,Y);return E}return J}())
         on your own data (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div></details>
     </div>
 
-    <hr class="sep">
-
-    <!-- 3D calibration -->
-    <div class="group">
-      <details class="sim" id="calibBox">
-        <summary>3D astigmatism calibration</summary>
-        <label class="row" style="margin-top:6px">First frame
-          <input type="number" id="calFirst" value="1" min="1" step="1" class="num"></label>
-        <label class="row">Last frame
-          <input type="number" id="calLast" value="1" min="1" step="1" class="num"></label>
-        <label class="row">z-step (nm)
-          <input type="number" id="calStep" value="10" min="0.1" step="1" class="num"></label>
-        <label class="row">z=0 ref frame (0=auto)
-          <input type="number" id="calRef" value="0" min="0" step="1" class="num"></label>
-        <div class="btnrow runrow">
-          <button class="primary" id="calBtn">Calibrate ▶</button>
-          <button id="calSaveBtn" disabled title="Save the calibration curves as JSON">Save calib.</button>
-        </div>
-        <details class="info"><summary>…further info…</summary>
-          <div class="hint">Load a bead z-stack (stage scanned through focus). Detects every spot per
-          frame, fits an elliptical Gaussian → σ_x / σ_y vs z, and fits σ = a(z−c)² + b to each.
-          Uses the detection settings above. Crop the range to ~±500 nm around focus for a good fit.</div></details>
-      </details>
-    </div>
 
     <hr class="sep">
 
@@ -1477,7 +1475,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22j
+      <div class="log" id="log">webSMLM v0.5.1-dev · build 2026-07-22k
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
