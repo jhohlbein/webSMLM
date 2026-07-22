@@ -1312,7 +1312,7 @@ X.B(E,Y);return E}return J}())
 </head>
 <body>
 <header>
-  <h1>webSMLM <span class="pill">v0.7.0-dev · build 2026-07-22s · proof-of-concept</span> All client-side, no upload.</h1>
+  <h1>webSMLM <span class="pill">v0.7.0-dev · build 2026-07-22t · proof-of-concept</span> All client-side, no upload.</h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
 </header>
 
@@ -1374,6 +1374,21 @@ X.B(E,Y);return E}return J}())
           <div class="hint">Load a bead z-stack (stage scanned through focus). Detects every spot per
           frame, fits an elliptical Gaussian → σ_x / σ_y vs z, and fits σ = a(z−c)² + b to each.
           Uses the detection settings above. Crop the range to ~±500 nm around focus for a good fit.</div></details>
+      </details>
+      <details class="sim" id="driftBox">
+        <summary>Drift correction (AIM)</summary>
+        <label class="row" style="margin-top:6px">Segment (frames)
+          <input type="number" id="driftSeg" value="100" min="5" max="2000" step="5" class="num"></label>
+        <label class="row">Search radius (nm)
+          <input type="number" id="driftRoi" value="120" min="10" max="1000" step="10" class="num"></label>
+        <div class="btnrow">
+          <button class="primary" id="driftBtn" disabled>Correct drift ▶</button>
+          <button id="driftShowBtn" disabled title="Plot the estimated drift vs frame">Show drift</button>
+        </div>
+        <details class="info"><summary>…further info…</summary>
+          <div class="hint">Point-based drift correction (AIM). Run localisations first, then Correct drift.
+          The search radius must exceed the drift <b>increment per segment</b> — shrink the segment for
+          faster drift. Corrected coordinates are used by the render and CSV; the raw coordinates are kept.</div></details>
       </details>
     </div>
 
@@ -1476,7 +1491,7 @@ X.B(E,Y);return E}return J}())
 
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
-      <div class="log" id="log">webSMLM v0.7.0-dev · build 2026-07-22s (phase 6: drift correction)
+      <div class="log" id="log">webSMLM v0.7.0-dev · build 2026-07-22t (phase 6: drift correction)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2743,6 +2758,66 @@ function aimDrift2D(locs, nFrames, px, segFrames, intersectNm, roiNm, onProgress
   return {fdx, fdy, segCenters:centers, segdx:dx2, segdy:dy2, nSeg};
 }
 
+let lastDrift=null;                               // last estimated drift (for the curve / reversibility)
+async function correctDrift(){
+  if(!lastResult||!lastResult.locs.length){ log('Run localisations first.'); return; }
+  const {locs,px}=lastResult;
+  let nFrames=0; for(const L of locs) if(L.frame+1>nFrames) nFrames=L.frame+1;
+  if(stack&&stack.n>nFrames) nFrames=stack.n;
+  const segF=Math.max(2,+$('driftSeg').value|0), roiNm=Math.max(10,+$('driftRoi').value||120), intD=15;
+  $('driftBtn').disabled=true;
+  try{
+    log(`\nDrift correction (AIM): ${segF}-frame segments, ±${roiNm} nm search…`);
+    const t0=performance.now();
+    const d=aimDrift2D(locs,nFrames,px,segF,intD,roiNm);
+    // apply reversibly — keep the raw coordinates in x0/y0
+    for(const L of locs){ if(L.x0===undefined){ L.x0=L.x; L.y0=L.y; }
+      const f=Math.min(nFrames-1,Math.max(0,L.frame|0)); L.x=L.x0+d.fdx[f]; L.y=L.y0+d.fdy[f]; }
+    lastDrift=d; lastResult.byFrame=null;          // positions changed
+    rerender(true);
+    let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+    for(let f=0;f<nFrames;f++){ if(d.fdx[f]<mnx)mnx=d.fdx[f]; if(d.fdx[f]>mxx)mxx=d.fdx[f];
+      if(d.fdy[f]<mny)mny=d.fdy[f]; if(d.fdy[f]>mxy)mxy=d.fdy[f]; }
+    log(`  drift span: x ${((mxx-mnx)*px).toFixed(0)} nm, y ${((mxy-mny)*px).toFixed(0)} nm · ${d.nSeg} segments · ${Math.round(performance.now()-t0)} ms.`);
+    if(simTrueDrift){                              // score against the simulator's ground truth
+      // per-axis RMS after removing the best constant offset
+      const rms=(rec,tru)=>{ let a=0,b=0; for(let f=0;f<nFrames;f++){a+=rec(f);b+=tru(f);} a/=nFrames;b/=nFrames;
+        let e=0; for(let f=0;f<nFrames;f++){ const dd=(rec(f)-a)-(tru(f)-b); e+=dd*dd; } return Math.sqrt(e/nFrames); };
+      const rx=rms(f=>-d.fdx[f]*px, f=>simTrueDrift.dx(f)), ry=rms(f=>-d.fdy[f]*px, f=>simTrueDrift.dy(f));
+      log(`  vs simulated ground truth: RMS x ${rx.toFixed(1)} nm, y ${ry.toFixed(1)} nm.`);
+    }
+    log(`  corrected coordinates now drive the render and CSV export.`);
+    $('driftShowBtn').disabled=false;
+  }catch(err){ log(`⚠ Drift correction failed: ${err.name}: ${err.message}`); }
+  finally{ $('driftBtn').disabled=false; }
+}
+// Plot the estimated drift (nm) vs frame on the SR canvas (measured drift = −correction).
+function drawDriftCurve(){
+  if(!lastDrift||!lastResult) return;
+  const d=lastDrift, px=lastResult.px, n=d.fdx.length;
+  const cv=$('sr'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
+  srFull=null; $('srTitle').textContent='Drift vs frame';
+  ctx.fillStyle='#f6f8fa'; ctx.fillRect(0,0,W,H);
+  const mL=60,mR=16,mT=34,mB=46, pw=W-mL-mR, ph=H-mT-mB;
+  let lo=0,hi=0; for(let f=0;f<n;f++){ const a=-d.fdx[f]*px,b=-d.fdy[f]*px; lo=Math.min(lo,a,b); hi=Math.max(hi,a,b); }
+  const pad=(hi-lo)*0.1||1; lo-=pad; hi+=pad;
+  const X=f=>mL+pw*f/Math.max(1,n-1), Y=v=>mT+ph*(1-(v-lo)/Math.max(1e-9,hi-lo));
+  ctx.strokeStyle='#c9d1d9'; ctx.fillStyle='#57606a'; ctx.font='11px sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const v of niceTicks(lo,hi,6)){ const y=Y(v); ctx.beginPath(); ctx.moveTo(mL,y); ctx.lineTo(mL+pw,y); ctx.stroke(); ctx.fillText(v.toFixed(0),mL-6,y); }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(const f of niceTicks(0,n-1,6)){ const x=X(f); ctx.fillText(f.toFixed(0),x,mT+ph+6); }
+  const line=(get,col)=>{ ctx.strokeStyle=col; ctx.lineWidth=1.6; ctx.beginPath();
+    for(let f=0;f<n;f++){ const x=X(f),y=Y(get(f)); f?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); };
+  line(f=>-d.fdx[f]*px,'#0a7d32'); line(f=>-d.fdy[f]*px,'#c81cc8');
+  ctx.fillStyle='#24292f'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('frame', mL+pw/2, H-12);
+  ctx.save(); ctx.translate(15,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText('drift (nm)',0,0); ctx.restore();
+  ctx.textAlign='left'; ctx.fillStyle='#0a7d32'; ctx.fillText('drift x', mL+pw-90, mT-6);
+  ctx.fillStyle='#c81cc8'; ctx.fillText('drift y', mL+pw-40, mT-6);
+  $('srInfo').textContent=`estimated drift · ${d.nSeg} segments · change a render setting to return to the reconstruction`;
+}
+
 /* ===========================================================================
    MODULE: pipeline
    =========================================================================== */
@@ -2754,7 +2829,7 @@ async function run(){
   // lock the data sources too: swapping the stack mid-run would pull frames
   // out from under the loop.
   $('runBtn').disabled=true; $('loadBtn').disabled=true; $('genBtn').disabled=true;
-  $('stopBtn').disabled=false; $('saveBtn').disabled=true; calib=null; $('zmin').value=''; $('zmax').value='';
+  $('stopBtn').disabled=false; $('saveBtn').disabled=true; $('driftBtn').disabled=true; $('driftShowBtn').disabled=true; lastDrift=null; calib=null; $('zmin').value=''; $('zmax').value='';
   let processed=0, stopped=false;
   try{
     const {w,h,n,px}=stack;
@@ -2888,7 +2963,7 @@ async function run(){
     // now that lastResult exists so locsForFrame() can index them
     if(lastFrame) drawRaw(lastFrame,w,h,lastSpots, lastFrameIdx>=0?locsForFrame(lastFrameIdx):null);
 
-    $('saveBtn').disabled = locs.length===0;
+    $('saveBtn').disabled = locs.length===0; $('driftBtn').disabled = locs.length===0;
     $('sFrames').textContent = stopped ? `${processed}/${n}` : n;
     $('sLoc').textContent=locs.length.toLocaleString();
     $('sDens').textContent=(locs.length/per).toFixed(1); $('sTime').textContent=Math.round(dt).toLocaleString();
@@ -2955,7 +3030,7 @@ $('genBtn').addEventListener('click',async()=>{
   log('Simulating movie…');
   $('genBtn').disabled=true; $('loadBtn').disabled=true; $('runBtn').disabled=true;
   try{
-    stack=await generateSynthetic(); lastResult=null; srFull=null; calib=null; stackName='webSMLM_simulated'; $('saveBtn').disabled=true;
+    stack=await generateSynthetic(); lastResult=null; srFull=null; calib=null; stackName='webSMLM_simulated'; $('saveBtn').disabled=true; $('driftBtn').disabled=true; $('driftShowBtn').disabled=true; lastDrift=null;
     const d=$('sr'); d.getContext('2d').clearRect(0,0,d.width,d.height); drawView();
     drawRaw((await stack.getFrames(0,1))[0],stack.w,stack.h,null);
     $('rawInfo').textContent=`frame 1/${stack.n}`; initScrub(); $('sFrames').textContent=stack.n;
@@ -2970,7 +3045,7 @@ $('genBtn').addEventListener('click',async()=>{
 
 $('file').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
-  $('runBtn').disabled=true; lastResult=null; srFull=null; calib=null; groundTruth=null; simTrueDrift=null; $('saveBtn').disabled=true;
+  $('runBtn').disabled=true; lastResult=null; srFull=null; calib=null; groundTruth=null; simTrueDrift=null; lastDrift=null; $('saveBtn').disabled=true; $('driftBtn').disabled=true; $('driftShowBtn').disabled=true;
   stackName=f.name; log(`Loading ${f.name}…`);
   try{
     stack=await loadTiffFile(f);
@@ -3032,6 +3107,8 @@ function initScrub(){
 $('scrub').addEventListener('input',e=>showFrame(+e.target.value));
 $('calBtn').addEventListener('click',runCalibration);
 $('calSaveBtn').addEventListener('click',exportCalibration);
+$('driftBtn').addEventListener('click',correctDrift);
+$('driftShowBtn').addEventListener('click',()=>{ if(lastDrift) drawDriftCurve(); });
 
 // Phasor 3D: reveal the Load-calibration control only for that method
 function updateMethodUI(){ $('cal3dRow').style.display = $('method').value==='phasor3d' ? 'block' : 'none'; }
@@ -3046,7 +3123,7 @@ function updateCalStatus(){
 // Load settings: apply a JSON of control values. (Full version with editable
 // defaults/min/max is planned; this imports plain {id: value} pairs.)
 const SETTING_IDS=['method','thr','psf','winr','exactbp','pxnm','gain','camoff','mag','rblur',
-  'lut','lutpct','memgb','chunkmb','frames','dens','phot','driftpx','calStep','calRef'];
+  'lut','lutpct','memgb','chunkmb','frames','dens','phot','driftpx','calStep','calRef','driftSeg','driftRoi'];
 $('loadSetBtn').addEventListener('click',()=>$('setFile').click());
 $('setFile').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
