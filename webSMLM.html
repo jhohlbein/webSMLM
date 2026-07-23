@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23a · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23b · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1423,7 +1423,7 @@ X.B(E,Y);return E}return J}())
           into two independent halves (odd/even frames), rendering each and correlating over Fourier rings; <b>FSC</b>
           is the 3D shell version, once z exists. FRC folds in labelling density and drift while NeNA does not, so
           reporting both is diagnostic (they disagree when drift remains). Results go to the Log — run localisations
-          first. <i>(0.8.0, in development.)</i></div></details>
+          first. <i>(NeNA implemented; FRC/FSC still in development.)</i></div></details>
       </details>
     </div>
 
@@ -1533,7 +1533,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23a · precision (NeNA / FRC) scaffold
+</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23b · precision (NeNA / FRC) scaffold
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -3072,6 +3072,104 @@ function drawDriftCurve(){
 }
 
 /* ===========================================================================
+   MODULE: precision — NeNA (nearest-neighbour analysis)
+   Endesfelder et al., Histochem. Cell Biol. 141, 629 (2014). The nearest-
+   neighbour distance between localizations in CONSECUTIVE frames is a mixture:
+   the same molecule re-appearing (a narrow Rayleigh whose scale is √2·σ, the
+   per-localization precision) sitting on a broad background from other
+   molecules. Fit a signal Rayleigh + quadratic background over the small-d
+   range and report σ = b/√2. Point-based, no FFT.
+   =========================================================================== */
+// For each point in A, the distance (px) to its nearest neighbour in B, via a
+// uniform grid with expanding-ring search (exact NN, ~O(n)).
+function gridNN(A,B){
+  if(!A.length||!B.length) return [];
+  let xmin=Infinity,ymin=Infinity,xmax=-Infinity,ymax=-Infinity;
+  for(const p of B){ if(p.x<xmin)xmin=p.x; if(p.x>xmax)xmax=p.x; if(p.y<ymin)ymin=p.y; if(p.y>ymax)ymax=p.y; }
+  const w=Math.max(1e-6,xmax-xmin), h=Math.max(1e-6,ymax-ymin);
+  const cell=Math.max(1e-6, Math.sqrt(w*h/B.length));
+  const nx=Math.ceil(w/cell)+1, ny=Math.ceil(h/cell)+1;
+  const grid=new Array(nx*ny);
+  const cxf=x=>Math.min(nx-1,Math.max(0,((x-xmin)/cell)|0));
+  const cyf=y=>Math.min(ny-1,Math.max(0,((y-ymin)/cell)|0));
+  for(const p of B){ const k=cyf(p.y)*nx+cxf(p.x); (grid[k]||(grid[k]=[])).push(p); }
+  const out=[];
+  for(const q of A){ const qx=cxf(q.x), qy=cyf(q.y); let best=Infinity;
+    for(let r=0;r<=nx+ny;r++){
+      for(let dy=-r;dy<=r;dy++){ const gy=qy+dy; if(gy<0||gy>=ny) continue;
+        for(let dx=-r;dx<=r;dx++){ if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+          const gx=qx+dx; if(gx<0||gx>=nx) continue; const ca=grid[gy*nx+gx]; if(!ca) continue;
+          for(const p of ca){ const D=(p.x-q.x)**2+(p.y-q.y)**2; if(D<best) best=D; } } }
+      if(isFinite(best) && Math.sqrt(best)<=r*cell) break;    // nothing unscanned can be closer
+    }
+    if(isFinite(best)) out.push(Math.sqrt(best));
+  }
+  return out;
+}
+// Fit A·(d/b²)exp(−d²/2b²) + c₁·d + c₂·d² by Levenberg–Marquardt (only A,b are
+// nonlinear, so it is well-conditioned) and return the Rayleigh scale b.
+function fitRayleighScale(d,y){
+  const gr=(x,b)=>{const b2=b*b; return (x/b2)*Math.exp(-x*x/(2*b2));};
+  const dgr=(x,b)=>{const b2=b*b,b3=b2*b; return (x/b3)*Math.exp(-x*x/(2*b2))*(x*x/b2-2);};
+  const n=d.length, f=(x,p)=>p[0]*gr(x,p[1])+p[2]*x+p[3]*x*x;
+  const cost=p=>{let c=0;for(let i=0;i<n;i++){const e=f(d[i],p)-y[i];c+=e*e;}return c;};
+  let pk=0,pkD=d[1]||1; for(let i=0;i<n;i++) if(y[i]>pk){pk=y[i];pkD=d[i];}
+  let p=[pk/Math.max(1e-9,gr(Math.max(1,pkD),Math.max(1,pkD))), Math.max(1,pkD), 0, 0];
+  let lambda=1e-2, cst=cost(p);
+  for(let it=0;it<300;it++){
+    const JtJ=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], Jtr=[0,0,0,0];
+    for(let i=0;i<n;i++){ const di=d[i];
+      const J=[gr(di,p[1]), p[0]*dgr(di,p[1]), di, di*di], e=f(di,p)-y[i];
+      for(let a=0;a<4;a++){ Jtr[a]+=J[a]*e; for(let bb=0;bb<4;bb++) JtJ[a][bb]+=J[a]*J[bb]; } }
+    let ok=false;
+    for(let t=0;t<14;t++){
+      const M=JtJ.map((row,a)=>row.map((v,bb)=>a===bb?v*(1+lambda):v));
+      const dp=solveLin(M,Jtr.map(v=>-v));
+      if(dp){ const pn=p.map((v,a)=>v+dp[a]); pn[1]=Math.max(0.5,pn[1]); pn[0]=Math.max(0,pn[0]);
+        const cn=cost(pn); if(cn<cst){p=pn;cst=cn;lambda=Math.max(1e-10,lambda*0.5);ok=true;break;} else lambda=Math.min(1e10,lambda*3); }
+      else lambda=Math.min(1e10,lambda*3);
+    }
+    if(!ok) break;
+  }
+  return p[1];
+}
+// NeNA: mean single-localization precision (nm). onProgress(0..1) optional.
+async function nenaPrecision(locs, px, onProgress){
+  const byF=new Map();
+  for(const L of locs){ const f=L.frame|0; let a=byF.get(f); if(!a){a=[];byF.set(f,a);} a.push(L); }
+  const frames=[...byF.keys()].sort((a,b)=>a-b);
+  const dists=[]; let _yld=performance.now();
+  for(let i=0;i<frames.length-1;i++){ const f0=frames[i],f1=frames[i+1];
+    if(f1===f0+1){ for(const dd of gridNN(byF.get(f0), byF.get(f1))) dists.push(dd*px); }
+    if(onProgress && performance.now()-_yld>50){ onProgress(i/frames.length); await tick(); _yld=performance.now(); }
+  }
+  if(dists.length<50) return {err:`only ${dists.length.toLocaleString()} consecutive-frame pairs — need more localizations`};
+  dists.sort((a,b)=>a-b);
+  // signal lives at small d; cap the range to a robust small-scale estimate so
+  // bins resolve the peak rather than being dominated by the background tail.
+  const p25=dists[Math.floor(dists.length*0.25)], maxD=Math.max(20, p25*4);
+  const nb=120, binW=maxD/nb, d=new Float64Array(nb), y=new Float64Array(nb);
+  for(let i=0;i<nb;i++) d[i]=(i+0.5)*binW;
+  for(const v of dists){ if(v<maxD) y[(v/binW)|0]++; }
+  return {sigma:fitRayleighScale(d,y)/Math.SQRT2, nPairs:dists.length};
+}
+async function computeNeNA(){
+  if(!lastResult||!lastResult.locs.length){ log('Run localisations first.'); return; }
+  $('nenaBtn').disabled=true; const bar=$('precBar'), prog=$('precProg');
+  try{
+    log('\nNeNA precision (nearest-neighbour, consecutive frames)…');
+    const t0=performance.now();
+    const r=await nenaPrecision(lastResult.locs, lastResult.px,
+      p=>{ bar.classList.add('on'); prog.style.width=(100*p).toFixed(0)+'%'; });
+    bar.classList.remove('on'); prog.style.width='0%';
+    if(r.err){ log('  '+r.err+'.'); return; }
+    log(`  σ = ${r.sigma.toFixed(1)} nm — mean single-localization precision, from ${r.nPairs.toLocaleString()} nearest-neighbour pairs · ${Math.round(performance.now()-t0)} ms.`);
+    log('  Measures precision only (Endesfelder et al., NeNA); best run after drift correction — compare with FRC resolution when available.');
+  }catch(err){ log(`⚠ NeNA failed: ${err.name}: ${err.message}`); }
+  finally{ $('nenaBtn').disabled=false; }
+}
+
+/* ===========================================================================
    MODULE: pipeline
    =========================================================================== */
 let stopRequested=false;
@@ -3371,7 +3469,7 @@ $('calSaveBtn').addEventListener('click',exportCalibration);
 $('driftBtn').addEventListener('click',correctDrift);
 $('driftShowBtn').addEventListener('click',()=>{ if(lastDrift) drawDriftCurve(); });
 // 0.8.0 (in development): localization-precision estimators. Scaffolded UI only.
-$('nenaBtn').addEventListener('click',()=>log('NeNA precision — not yet implemented (0.8.0 in development).'));
+$('nenaBtn').addEventListener('click',computeNeNA);
 $('frcBtn').addEventListener('click',()=>log('FRC/FSC resolution — not yet implemented (0.8.0 in development).'));
 
 // Phasor 3D: reveal the Load-calibration control only for that method
