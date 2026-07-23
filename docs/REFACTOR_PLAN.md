@@ -38,7 +38,7 @@ their historical "Phase N" headings as a record; new work is version-keyed.
 | Version | Plan |
 |---|---|
 | **v0.8.0** | Localization precision — **FRC / FSC** and/or **NeNA** (see below) |
-| later | Poisson MLE fitting · localization filtering · 3D point-cloud view |
+| later | Scriptable / headless pipeline (see below) · Poisson MLE fitting · localization filtering · 3D point-cloud view |
 
 ---
 
@@ -441,10 +441,39 @@ phasor localizations, prefer **empirical / resolution** measures:
   rather than by eye.
 - **Regression safety.** There are currently no automated tests. Even a minimal
   headless check (fixed-seed synthetic stack → assert localization count and
-  RMS error within bounds) would protect the numerics through this refactor.
+  RMS error within bounds) would protect the numerics through this refactor —
+  and it falls out of the scriptable pipeline below for free.
 - **Branching.** `main` is the live GitHub Pages site and Zenodo release line;
   do this work on `webSMLM_local` (or per-phase branches) and merge when a phase
   is complete and validated.
+
+---
+
+## Later — scriptable / headless pipeline
+
+**Goal.** Run the full pipeline (load → detect/fit → drift → export) *without
+clicking through the UI*, so one can (a) batch-process many files in one go, and
+(b) run an identical end-to-end scenario across browsers and compare results and
+timings. Requested as a "for later" item.
+
+- ☐ **Config-driven core.** The pipeline currently reads settings straight from
+  the DOM (`$('...').value`). Factor that into a plain **config object** the
+  pipeline accepts (file/source, pixel size, fit method, detection k·σ, fit
+  radius, drift `{seg, roi, z}`, render/export options); the UI just builds the
+  config. This decoupling is the main piece of work.
+- ☐ **Small public API**, e.g. `window.webSMLM.analyze(config) → Promise<result>`
+  returning localizations + per-stage timings + drift; and `analyzeBatch(files,
+  config)` looping over multiple `File`s or URLs.
+- ☐ **Cross-browser benchmark mode.** A fixed scenario (bundled simulated stack
+  or a fixture URL) auto-run via a URL trigger (e.g. `?bench=default`) that dumps
+  a **machine-readable JSON report** — per-stage timings, worker utilisation,
+  localization count, and a **result hash** for correctness comparison. Open the
+  same URL in each browser and diff the JSON. (Directly answers the "why is it
+  faster in browser X" question with numbers.)
+- ☐ **Regression check** reuses the same entry point: fixed-seed synthetic →
+  assert localization count and RMS within bounds (see Cross-cutting above).
+- Single-file constraint preserved: an exposed API + optional URL-param autorun,
+  no build step. Output stays the existing CSV plus the JSON run report.
 
 
 ### Phase 4 — future ideas
