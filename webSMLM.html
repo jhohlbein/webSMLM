@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.7.4 · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.7.5-dev · build 2026-07-23a · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1424,13 +1424,20 @@ X.B(E,Y);return E}return J}())
       <label class="row" style="margin-top:10px">Threshold (k·σ_noise) <input type="number" id="thr" min="1" max="8" step="0.5" value="4" class="num"></label>
       <label class="row">σ_PSF (px) <input type="number" id="psf" min="0.8" max="2.5" step="0.1" value="1.3" class="num"></label>
       <label class="row">Fit radius (px) <input type="number" id="winr" min="2" max="5" step="1" value="3" class="num"></label>
+      <label class="row" style="margin-top:8px">Detection filter
+        <select id="detFilter" class="sel">
+          <option value="dog">DoG band-pass</option>
+          <option value="wave">Wavelet (B-spline)</option>
+        </select></label>
       <label class="row" style="margin-top:8px">Exact band-pass (slower) <input type="checkbox" id="exactbp"></label>
       <details class="info"><summary>…further info…</summary>
         <div class="hint">Phasor is ~100–250× faster per candidate (265× on the GATTA-PAINT test stack); Gaussian LS ≈ slightly better precision. (Current Gaussian is least-squares, not MLE.)
         σ_noise is the spread of the band-passed image, not the PSF width.
-        <b>Exact band-pass</b> replaces the fast box approximation of the background with a true
-        Gaussian: ~2× slower, but exactly reproducible — use it to validate the approximation
-        on your own data (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div></details>
+        <b>Detection filter</b> — <b>DoG band-pass</b> (default) is a difference of Gaussians tuned by σ_PSF.
+        <b>Wavelet (B-spline)</b> is the à trous cubic-B-spline wavelet used by ThunderSTORM: no σ (its scale is
+        fixed), roughly 2× faster to filter, and it changes which spots pass the threshold — re-tune <b>k</b> after switching.
+        <b>Exact band-pass</b> (DoG only) replaces the fast box approximation of the background with a true
+        Gaussian: ~2× slower, but exactly reproducible (on the GATTA-PAINT test stack it changes 0.38 % of detections).</div></details>
     </div>
 
 
@@ -1506,7 +1513,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.7.4 · drift correction (AIM, 2D + 3D)
+</span></noscript>webSMLM v0.7.5-dev · build 2026-07-23a · drift correction (AIM, 2D + 3D)
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -1987,9 +1994,45 @@ function bandpass(img,w,h,sigma,exact){
   for(let i=0;i<w*h;i++) _bpSm[i]-=_bpLg[i];
   return _bpSm;                                    // valid until the next bandpass() call
 }
+
+/* à trous B-spline wavelet band-pass (ThunderSTORM-style). One "level" is a
+   separable convolution with the cubic B3-spline kernel [1,4,6,4,1]/16 dilated
+   by `step` (the à trous "holes"). The 2nd wavelet plane W2 = V1 − V2 (with
+   V1 = level(img,1), V2 = level(V1,2)) is the band-passed spot image. It has
+   no σ parameter — the scale is fixed by the levels — and replaces BOTH DoG
+   convolutions (small Gaussian + box background) with two cheap 5-tap passes:
+   ~1.9× faster band-pass in a JavaScriptCore micro-benchmark. Reuses _clMirror
+   for edges; interior fast-path mirrors blurInto. */
+let _wW=0,_wH=0,_wV1=null,_wV2=null,_wTmp=null,_wOut=null;
+function atrous(src,dst,tmp,w,h,step){
+  const s2=2*step;
+  for(let y=0;y<h;y++){ const row=y*w;                        // horizontal
+    for(let x=0;x<w;x++){ let a;
+      if(x>=s2&&x<w-s2){ const c=row+x; a=0.375*src[c]+0.25*(src[c-step]+src[c+step])+0.0625*(src[c-s2]+src[c+s2]); }
+      else a=0.375*src[row+_clMirror(x,w)]+0.25*(src[row+_clMirror(x-step,w)]+src[row+_clMirror(x+step,w)])+0.0625*(src[row+_clMirror(x-s2,w)]+src[row+_clMirror(x+s2,w)]);
+      tmp[row+x]=a; } }
+  const stw=step*w,s2w=s2*w;
+  for(let y=0;y<h;y++){ const row=y*w, interior=y>=s2&&y<h-s2;  // vertical
+    for(let x=0;x<w;x++){ let a;
+      if(interior){ const c=row+x; a=0.375*tmp[c]+0.25*(tmp[c-stw]+tmp[c+stw])+0.0625*(tmp[c-s2w]+tmp[c+s2w]); }
+      else a=0.375*tmp[_clMirror(y,h)*w+x]+0.25*(tmp[_clMirror(y-step,h)*w+x]+tmp[_clMirror(y+step,h)*w+x])+0.0625*(tmp[_clMirror(y-s2,h)*w+x]+tmp[_clMirror(y+s2,h)*w+x]);
+      dst[row+x]=a; } }
+  return dst;
+}
+function waveletBP(img,w,h){
+  if(w!==_wW||h!==_wH){ _wW=w;_wH=h; _wV1=new Float32Array(w*h);_wV2=new Float32Array(w*h);_wTmp=new Float32Array(w*h);_wOut=new Float32Array(w*h); }
+  atrous(img,_wV1,_wTmp,w,h,1); atrous(_wV1,_wV2,_wTmp,w,h,2);
+  const out=_wOut; for(let i=0;i<w*h;i++) out[i]=_wV1[i]-_wV2[i];
+  return out;                                       // valid until the next waveletBP() call
+}
+// Detection filter selector: 'wave' → à trous B-spline wavelet, else DoG band-pass.
+function detectFilter(img,w,h,sigma,exact,wave){ return wave ? waveletBP(img,w,h) : bandpass(img,w,h,sigma,exact); }
+
 function findMaxima(filt,w,h,k,border){
-  let mean=0; for(let i=0;i<filt.length;i++)mean+=filt[i]; mean/=filt.length;
-  let varr=0; for(let i=0;i<filt.length;i++)varr+=(filt[i]-mean)**2; varr/=filt.length;
+  // mean and variance in a single pass (Σ and Σ²), not two.
+  let sum=0,sumSq=0; const n=filt.length;
+  for(let i=0;i<n;i++){ const v=filt[i]; sum+=v; sumSq+=v*v; }
+  const mean=sum/n, varr=Math.max(0, sumSq/n-mean*mean);
   const thr=mean+k*Math.sqrt(varr), max=[];
   for(let y=border;y<h-border;y++)for(let x=border;x<w-border;x++){
     const c=filt[y*w+x]; if(c<thr) continue; let isMax=true;
@@ -2451,6 +2494,7 @@ const WORKER_PRELUDE=[
   "let _mapKey='',_mapX=null,_mapY=null;",
   "const _bmCache={};",
   "let _bpW=0,_bpH=0,_bpSm=null,_bpLg=null,_bpTmp=null;",
+  "let _wW=0,_wH=0,_wV1=null,_wV2=null,_wTmp=null,_wOut=null;",
   "let _pcol=null,_prow=null,_pN=0;",
 ].join('\n');
 
@@ -2459,7 +2503,7 @@ function workerSource(){
     "const _clMirror="+_clMirror.toString()+";",
     blurInto.toString(), boxSizes.toString(), boxMap.toString(),
     boxH.toString(), boxV.toString(), boxInto.toString(),
-    bandpass.toString(), findMaxima.toString(),
+    bandpass.toString(), atrous.toString(), waveletBP.toString(), detectFilter.toString(), findMaxima.toString(),
     solveLin.toString(), sseWin.toString(), gaussianFit.toString(), phasorFit.toString(), polyEval.toString(),
     `onmessage=function(e){
       const d=e.data;
@@ -2470,19 +2514,20 @@ function workerSource(){
         // makes the main thread fall back to single-threaded cleanly.
         try{
           const w=16,h=16,img=new Float32Array(w*h); img[8*w+8]=100;
-          const f=bandpass(img,w,h,1.3,false);
+          const f=detectFilter(img,w,h,1.3,false,false);
           findMaxima(f,w,h,4,4);
+          findMaxima(detectFilter(img,w,h,1.3,false,true),w,h,4,4);
           phasorFit(img,w,h,8,8,7);
           gaussianFit(img,w,h,8,8,7,1.3);
           postMessage({pong:1});
         }catch(err){ postMessage({pong:0,err:String(err&&err.message||err)}); }
         return;
       }
-      const {frames,start,w,h,sigma,k,win,method,border,exact,zcal}=d;
+      const {frames,start,w,h,sigma,k,win,method,border,exact,wave,zcal}=d;
       const out=[]; let tD=0,tF=0,nC=0;
       for(let i=0;i<frames.length;i++){
         const img=frames[i], t0=performance.now();
-        const filt=bandpass(img,w,h,sigma,exact);
+        const filt=detectFilter(img,w,h,sigma,exact,wave);
         const maxima=findMaxima(filt,w,h,k,border);
         const t1=performance.now(); tD+=t1-t0; nC+=maxima.length;
         const isPh = method==='phasor'||method==='phasor3d';
@@ -2562,14 +2607,14 @@ async function runCalibration(){
   const step=+$('calStep').value||10, refFr=+$('calRef').value|0;
   if(last<=first){ log('Calibration: last frame must exceed first.'); return; }
   const {w,h,px}=stack, sigma=+$('psf').value, k=+$('thr').value, win=2*(+$('winr').value|0)+1,
-        exactBP=$('exactbp').checked, border=(win-1)/2+1;
+        exactBP=$('exactbp').checked, waveBP=$('detFilter').value==='wave', border=(win-1)/2+1;
   $('calBtn').disabled=true; $('runBtn').disabled=true; $('calSaveBtn').disabled=true; calib=null;
   try{
     log(`\nCalibration: frames ${first}–${last} · z-step ${step} nm · win ${win} · k ${k}`);
     const pts=[]; let lastYield=performance.now();               // {fi, sx, sy, pr, rrel}
     for(let fi=first-1; fi<last; fi++){
       const img=(await stack.getFrames(fi,fi+1))[0];
-      const maxima=findMaxima(bandpass(img,w,h,sigma,exactBP),w,h,k,border);
+      const maxima=findMaxima(detectFilter(img,w,h,sigma,exactBP,waveBP),w,h,k,border);
       const frameLocs=[];
       for(const [cx,cy] of maxima){
         const L=gaussianFitElliptical(img,w,h,cx,cy,win,sigma); if(!L) continue;
@@ -2618,7 +2663,7 @@ async function runCalibration(){
     const fitsByFrame=new Map();
     for(const p of good){ let a=fitsByFrame.get(p.fi); if(!a){a=[];fitsByFrame.set(p.fi,a);} a.push({x:p.x,y:p.y}); }
     calib={ first,last,step,px,zref, qx,qy,qpr, zcal,
-            det:{sigma,k,win,border,exactBP}, fitsByFrame,
+            det:{sigma,k,win,border,exactBP,waveBP}, fitsByFrame,
             pts:good.map((p,i)=>({z:zr[i],sx:sxN[i],sy:syN[i],pr:p.pr})),
             zmin:Math.min(...zr), zmax:Math.max(...zr) };
     cal3d=zcal;                               // make it immediately usable by Phasor 3D
@@ -2938,11 +2983,12 @@ async function run(){
     const {w,h,n,px}=stack;
     const sigma=+$('psf').value, k=+$('thr').value, win=2*(+$('winr').value|0)+1, method=$('method').value;
     const exactBP=$('exactbp').checked;             // read once — not per frame
+    const waveBP=$('detFilter').value==='wave';     // detection filter: wavelet vs DoG
     const zcal = method==='phasor3d' ? cal3d : null;   // z(ratio) model for Phasor 3D
     if(method==='phasor3d' && !zcal){ log('Phasor 3D needs a calibration — run Calibrate or load a *_calib.json first.'); return; }
     const label = method==='phasor'?'phasor 2D':method==='phasor3d'?'phasor 3D':'Gaussian LS';
     const border=(win-1)/2+1, locs=[]; let lastSpots=null, lastFrame=null, lastFrameIdx=-1;
-    log(`\nRun: ${n} frames · ${label} fit · σ=${sigma} · k=${k} · win=${win} · band-pass ${exactBP?'exact':'fast (box)'}`);
+    log(`\nRun: ${n} frames · ${label} fit · σ=${sigma} · k=${k} · win=${win} · filter ${waveBP?'wavelet (B-spline)':(exactBP?'DoG exact':'DoG fast (box)')}`);
     const pool = await getPool();
     // Workers only pay off when per-frame work clearly exceeds the cost of
     // shipping a frame across the boundary; tiny frames stay single-threaded.
@@ -2976,7 +3022,7 @@ async function run(){
           // main-thread copy stays valid after dispatch
           if(frames.length) shown={img:frames[0],fi:s};
           // no transfer list: frames are cloned, so any RAM cache survives
-          wk.postMessage({frames,start:s,w,h,sigma,k,win,method,border,exact:exactBP,zcal});
+          wk.postMessage({frames,start:s,w,h,sigma,k,win,method,border,exact:exactBP,wave:waveBP,zcal});
         };
         pool.forEach(wk=>{
           wk.onmessage=ev=>{
@@ -2989,12 +3035,12 @@ async function run(){
             if(doneF-lastPrev>=100){                  // refresh both views, as the serial path does
               lastPrev=doneF; const tp=performance.now();
               if(shown){                              // raw frame + detected ROIs
-                const mx=findMaxima(bandpass(shown.img,w,h,sigma,exactBP),w,h,k,border);
+                const mx=findMaxima(detectFilter(shown.img,w,h,sigma,exactBP,waveBP),w,h,k,border);
                 drawRaw(shown.img,w,h,mx); lastSpots=mx; lastFrame=shown.img; lastFrameIdx=shown.fi;
                 $('rawInfo').textContent=`frame ${shown.fi+1}/${n} — ${mx.length} spots`;
               }
               if(locs.length && performance.now()-lastSrMs>SR_PREVIEW_MS){ lastSrMs=performance.now();
-                lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}}; rerender(true); }
+                lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP,waveBP}}; rerender(true); }
               previewMs+=performance.now()-tp;        // display only, not compute time
             }
             dispatch(wk);
@@ -3011,7 +3057,7 @@ async function run(){
       locs.sort((p,q)=>p.frame-q.frame);
       if(shown){ const tp=performance.now();       // display only — not compute time
         lastFrame=shown.img; lastFrameIdx=shown.fi;
-        lastSpots=findMaxima(bandpass(shown.img,w,h,sigma,exactBP),w,h,k,border);
+        lastSpots=findMaxima(detectFilter(shown.img,w,h,sigma,exactBP,waveBP),w,h,k,border);
         $('rawInfo').textContent=`frame ${shown.fi+1}/${n} — ${lastSpots.length} spots`;
         previewMs+=performance.now()-tp; }
     } else {
@@ -3026,7 +3072,7 @@ async function run(){
       for(let j=0; j<block.length; j++){
         const fi=b+j, img=block[j];
         const tb=performance.now();
-        const filt=bandpass(img,w,h,sigma,exactBP);
+        const filt=detectFilter(img,w,h,sigma,exactBP,waveBP);
         const maxima=findMaxima(filt,w,h,k,border);
         const tc=performance.now(); tDetect+=tc-tb; nCand+=maxima.length;
         for(const [cx,cy] of maxima){
@@ -3041,7 +3087,7 @@ async function run(){
           $('rawInfo').textContent=`frame ${fi+1}/${n} — ${maxima.length} spots`;
           if(locs.length && performance.now()-lastSrMs>SR_PREVIEW_MS){   // live super-res preview, throttled
             const tp=performance.now(); lastSrMs=performance.now();
-            lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}};
+            lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP,waveBP}};
             rerender(true);
             previewMs+=performance.now()-tp;       // don't charge preview to compute time
           }
@@ -3061,7 +3107,7 @@ async function run(){
     const dt=performance.now()-t0-previewMs;       // localization work only
     const per=Math.max(1,processed);
 
-    lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP}};
+    lastResult={locs,w,h,px,mag:+$('mag').value,det:{sigma,k,win,border,exactBP,waveBP}};
     rerender(true);
     // refresh the raw panel with the accepted localizations (magenta) overlaid,
     // now that lastResult exists so locsForFrame() can index them
@@ -3192,7 +3238,7 @@ async function showFrame(i){
       det=calib.det; getLocs=fi=>(calib.fitsByFrame.get(fi)||[]);
     }
     if(det){
-      spots=findMaxima(bandpass(img,stack.w,stack.h,det.sigma,det.exactBP),stack.w,stack.h,det.k,det.border);
+      spots=findMaxima(detectFilter(img,stack.w,stack.h,det.sigma,det.exactBP,det.waveBP),stack.w,stack.h,det.k,det.border);
       locsF=getLocs(i);
     }
     drawRaw(img,stack.w,stack.h,spots,locsF);
