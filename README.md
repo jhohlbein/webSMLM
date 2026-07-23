@@ -35,13 +35,16 @@ walk-through of every step.
   ImageJ stacks (single directory entry, frames laid out after it — as written
   above ~4 GB) are indexed arithmetically; **multi-IFD stacks (e.g. multi-GB
   Micro-Manager MMStacks)** are indexed by walking the IFD chain. A 4.89 GB /
-  40,000-frame stack processes in ~24 s.
+  40,000-frame stack processes in ~12 s.
 - **Memory-aware loading**: caches frames in RAM within a configurable budget,
   or streams large stacks in bounded heaps (the pattern that also enables
   real-time processing of a live camera buffer). Falls back to streaming
   automatically if an in-memory load hits the browser's memory ceiling.
-- **Detects** ROIs with a Difference-of-Gaussians band-pass filter and a
-  `mean + k·σ` threshold on the filtered image.
+- **Detects** ROIs by band-passing each frame — either an **à trous B-spline
+  wavelet** (the default, as in ThunderSTORM; no σ, ~2× faster to filter) or a
+  **Difference-of-Gaussians** filter — then keeping strict local maxima above a
+  `mean + k·σ` threshold. The two respond differently, so re-tune **k** when you
+  switch.
 - **Localizes** with **phasor** fitting (very fast, no iteration) or a
   **least-squares 2D Gaussian** fit.
 - **3D astigmatism** (**Phasor 3D**): calibrate a bead z-stack — detect every
@@ -77,27 +80,39 @@ walk-through of every step.
 ## Performance
 
 Detection and fitting run in parallel across a pool of Web Workers (one per
-logical core), with the band-pass filter optimised for the common case. Measured
-on a laptop, running the single HTML file directly from `file://`:
+logical core). Measured on a laptop, running the single HTML file directly from
+`file://` with the default **wavelet** detector:
 
 | Dataset | Frames | Frame size | Time | Rate |
 |---|---|---|---|---|
-| GATTA-PAINT 80R | 1999 | 82 × 83 | ~0.71 s | ~15,000 loc/s |
-| Nile Red / *L. lactis* | 1173 | 256 × 256 | ~0.68 s | ~129,000 loc/s |
-| 3D STORM (4.89 GB) | 40000 | 256 × 256 | ~24 s | ~182,000 loc/s |
+| 3D STORM (4.89 GB) [[Leterrier]](experimental_data/README.md) | 40000 | 256 × 256 | ~12 s | ~350,000 loc/s |
+| Nile Red / *L. lactis* | 1173 | 256 × 256 | <0.5 s | — |
+| GATTA-PAINT 80R | 1999 | 82 × 83 | <0.5 s | — |
 
-That is ~7× and ~30× faster respectively than v0.2.0, with identical
-localization counts. Notes:
+The two smaller stacks finish **faster than can be timed reliably** (well under a
+second — JIT warm-up and timer resolution dominate), so only the large 3D stack
+gives a stable throughput figure: the 4.89 GB stack — never held in memory,
+streamed frame by frame — completes in ~12 s (~350k loc/s), about **2× the
+throughput** of the earlier ~24 s figure; the faster wavelet filter, a fused
+threshold pass, and browser choice all contribute. Notes:
 
+- **Browser matters.** On macOS the numeric path runs fastest in **Safari**, then
+  **Chrome**, then **Firefox** (JS-engine differences). Expect run-to-run
+  variation too (JIT warm-up, GC, thermal, disk cache) — a repeat of the same
+  stack is usually quicker.
+- **Detector choice changes results**, not just speed: the default wavelet filter
+  and the DoG band-pass find slightly different spot sets, so counts differ
+  between them (and from pre-0.7.5 versions, which were DoG-only).
 - **Workers are probed before use**, with a self-test that exercises the whole
   numeric path. If they are unavailable — some browsers restrict workers on
   `file://` — the app falls back to single-threaded automatically and says so
   in the log.
 - **Small frames stay single-threaded** on purpose: below ~20k pixels per frame
   the cost of handing a frame to a worker outweighs the work itself.
-- The band-pass background term uses a **box-filter approximation** by default
-  (~2× faster, changes ~0.4% of detections on the test data). Tick
-  **Exact band-pass** for a true Gaussian when you need exact reproducibility.
+- The **DoG** filter approximates its background term with a box filter by
+  default (~2× faster than a true Gaussian, changes ~0.4% of *its* detections);
+  tick **Exact band-pass** for the true Gaussian. The wavelet filter has no such
+  option (and no σ).
 - The run log reports a **timing breakdown** (frame access / detect / fit) so
   you can see where time goes on your own data.
 
@@ -114,7 +129,8 @@ The in-app **Help & guide** documents each stage and lists references. Key ones:
   K. J. A. Martens, A. N. Bader, S. Baas, B. Rieger, J. Hohlbein,
   *Phasor based single-molecule localization microscopy in 3D (pSMLM-3D)*,
   J. Chem. Phys. **148**, 123311 (2018). https://doi.org/10.1063/1.5005899
-- **Detection & thresholding** (DoG band-pass + std-based threshold, after
+- **Detection & thresholding** (both the default à trous B-spline **wavelet**
+  filter and the **DoG** band-pass, plus the std-based threshold, follow
   ThunderSTORM): M. Ovesný et al., *Bioinformatics* **30**(16), 2389–2390 (2014).
   https://doi.org/10.1093/bioinformatics/btu202
 - **LS vs MLE fitting**: K. I. Mortensen et al., *Nat. Methods* **7**, 377–381
