@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.7.7-dev · build 2026-07-23c · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.7.7-dev · build 2026-07-23d · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1515,7 +1515,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.7.7-dev · build 2026-07-23c · PNG image export
+</span></noscript>webSMLM v0.7.7-dev · build 2026-07-23d · PNG image export
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2484,14 +2484,19 @@ async function exportCSV(){
 
 // Save the reconstruction EXACTLY as shown in the SR panel (current zoom/pan,
 // scale bar and depth bar included) as a PNG. srFull holds the full-resolution
-// render (w·mag × h·mag); when the view is fit/zoomed-out it is DENSER than the
-// screen, so we export at that native resolution (s = 1/zoom > 1), down to a
-// floor of the on-screen size. Overlays are drawn at fixed pixel sizes, so they
-// are scaled by s to stay proportional to the enlarged image.
+// render (w·mag × h·mag). Same field of view as the screen, just more pixels:
+//  • zoomed out — srFull is denser than the screen → export at that native
+//    resolution (s = 1/zoom);
+//  • zoomed in — srFull is upscaled on screen, so there is no extra image
+//    detail, but we still SUPERSAMPLE the composite (≥ EXPORT_MIN_LONG px long
+//    edge, ≥ 2×) so the vector scale bar / depth bar stay crisp instead of
+//    dropping to screen pixels. The image is nearest-neighbour, as on screen.
+// Overlays are fixed-pixel, so they are drawn scaled by s to stay proportional.
+const EXPORT_MIN_LONG=2000;
 async function exportImage(){
   if(!srFull){ log('Nothing to save — render a reconstruction first.'); return; }
   const d=$('sr'), DW=d.width, DH=d.height;
-  const s=Math.max(1, 1/view.zoom);                       // >1 ⇒ srFull denser than the screen
+  const s=Math.max(1/view.zoom, 2, EXPORT_MIN_LONG/Math.max(DW,DH));
   const outW=Math.round(DW*s), outH=Math.round(DH*s);
   const sw=DW/view.zoom, sh=DH/view.zoom, sx=view.cx-sw/2, sy=view.cy-sh/2;
   const cv=document.createElement('canvas'); cv.width=outW; cv.height=outH;
@@ -2508,7 +2513,8 @@ async function exportImage(){
   const name=stackName.replace(/\.(ome\.)?tiff?$/i,'').replace(/\.[^.]*$/,'')+'_SMLM.png';
   const saved=await saveBlob(blob,name,'PNG image','image/png','.png');
   if(!saved){ log('Image save cancelled.'); return; }
-  log(`Saved reconstruction view as ${saved} (${outW}×${outH} px${s>1?` — ${s.toFixed(1)}× the on-screen size`:''}, ${(blob.size/1048576).toFixed(1)} MB).`);
+  const superSampled = s > 1/view.zoom + 1e-6;            // floor kicked in (zoomed past native)
+  log(`Saved reconstruction view as ${saved} (${outW}×${outH} px${superSampled?' — supersampled for crisp overlays':' — native resolution'}, ${(blob.size/1048576).toFixed(1)} MB).`);
 }
 
 /* ===========================================================================
