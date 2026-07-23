@@ -1246,7 +1246,7 @@ X.B(E,Y);return E}return J}())
   details.sim>summary::before{content:'▸';display:inline-block;margin-right:8px;transition:transform .15s}
   details.sim[open]>summary::before{content:'▾'}
   /* trailing hint that the row expands to more options */
-  details.sim>summary::after{content:' ⋯';color:var(--accent);opacity:.8;font-weight:700}
+  details.sim>summary::after{content:' ⋯';color:inherit;font-weight:700}
   details.sim>summary:hover{color:var(--fg)}
   details.sim>summary:hover::after{opacity:1}
   details.info{margin:6px 0 2px}
@@ -1321,8 +1321,8 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.7.3 · proof-of-concept</span> All client-side, no upload.</h1>
-  <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · see <b>Help &amp; guide</b> for methods &amp; references</p>
+  <h1>webSMLM <span class="pill">v0.7.3 · proof-of-concept</span></h1>
+  <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
 <div class="wrap">
@@ -1338,11 +1338,11 @@ X.B(E,Y);return E}return J}())
         <button id="saveSetBtn">Save settings</button>
       </div>
       <div class="btnrow">
-        <button class="primary" id="runBtn" disabled>Run ▶</button>
-        <button class="danger" id="stopBtn" disabled>Stop ⏹</button>
+        <button class="primary" id="runBtn" disabled>Run</button>
+        <button class="danger" id="stopBtn" disabled>Stop</button>
       </div>
-      <button id="saveBtn" disabled title="Export localizations as ThunderSTORM-compatible CSV">Save localisations ⭳</button>
-      <button id="helpBtn" class="helpbtn" style="margin-top:6px">❓ Help &amp; guide</button>
+      <button id="saveBtn" disabled title="Export localizations as ThunderSTORM-compatible CSV">Save localisations</button>
+      <button id="helpBtn" class="helpbtn" style="margin-top:6px">Help &amp; guide</button>
       <div class="bar" id="bar"><i id="prog"></i></div>
       <input type="file" id="file" accept=".tif,.tiff" hidden>
       <input type="file" id="setFile" accept=".json" hidden>
@@ -1376,7 +1376,7 @@ X.B(E,Y);return E}return J}())
         <label class="row">z=0 ref frame (0=auto)
           <input type="number" id="calRef" value="0" min="0" step="1" class="num"></label>
         <div class="btnrow">
-          <button class="primary" id="calBtn">Calibrate ▶</button>
+          <button class="primary" id="calBtn">Calibrate</button>
           <button id="calSaveBtn" disabled title="Save the calibration curves as JSON">Save calib.</button>
         </div>
         <details class="info"><summary>…further info…</summary>
@@ -1393,7 +1393,7 @@ X.B(E,Y);return E}return J}())
         <label class="row" id="driftZRow" style="display:none">Correct z too (3D)
           <input type="checkbox" id="driftZ" checked></label>
         <div class="btnrow">
-          <button class="primary" id="driftBtn" disabled>Correct drift ▶</button>
+          <button class="primary" id="driftBtn" disabled>Correct drift</button>
           <button id="driftShowBtn" disabled title="Plot the estimated drift vs frame">Show drift</button>
         </div>
         <div class="bar" id="driftBar"><i id="driftProg"></i></div>
@@ -1484,7 +1484,7 @@ X.B(E,Y);return E}return J}())
       <div class="stat"><div class="n" id="sFrames">–</div><div class="l">Frames</div></div>
       <div class="stat"><div class="n" id="sLoc">–</div><div class="l">Localizations</div></div>
       <div class="stat"><div class="n" id="sDens">–</div><div class="l">Loc / frame</div></div>
-      <div class="stat"><div class="n" id="sTime">–</div><div class="l">Compute (ms)</div></div>
+      <div class="stat"><div class="n" id="sTime">–</div><div class="l">Compute (s)</div></div>
     </div>
 
     <div class="canvases">
@@ -2307,7 +2307,7 @@ function rerender(keepView){
   if(!keepView || srFull.width!==pw || srFull.height!==ph) fitView();
   clampView(); drawView();
   // reconstruction pixel = camera pixel / magnification (e.g. 160 nm / 10× = 16 nm)
-  $('srInfo').textContent=`${lastResult.locs.length.toLocaleString()} locs · ${mag}× · ${(lastResult.px/mag).toFixed(1)} nm/px (${lastResult.px} nm cam)`+
+  $('srInfo').textContent=`${lastResult.locs.length.toLocaleString()} locs · ${(lastResult.px/mag).toFixed(1)} nm/px`+
     (zColor?` · z ${zlo.toFixed(0)}…${zhi.toFixed(0)} nm`:'')+` · scroll to zoom, drag to pan`;
 }
 
@@ -3070,7 +3070,7 @@ async function run(){
     $('saveBtn').disabled = locs.length===0; $('driftBtn').disabled = locs.length===0;
     $('sFrames').textContent = stopped ? `${processed}/${n}` : n;
     $('sLoc').textContent=locs.length.toLocaleString();
-    $('sDens').textContent=(locs.length/per).toFixed(1); $('sTime').textContent=Math.round(dt).toLocaleString();
+    $('sDens').textContent=(locs.length/per).toFixed(1); $('sTime').textContent=(dt/1000).toFixed(1);
     log(`${stopped?'Stopped':'Done'}: ${locs.length} localizations from ${processed}/${n} frames in ${Math.round(dt)} ms (${(dt/per).toFixed(2)} ms/frame, ${(locs.length/(dt/1000)|0).toLocaleString()} loc/s).`);
     // where the time actually goes — drives the Phase 2 optimisation order.
     // In parallel mode detect/fit are summed ACROSS workers, so they are CPU
