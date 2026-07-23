@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23i · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23j · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1537,7 +1537,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23i · precision (NeNA / FRC) scaffold
+</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23j · precision (NeNA / FRC) scaffold
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -3274,7 +3274,7 @@ async function frcResolution(locs, px, mag, onProgress){
   }
   const good=res.filter(isFinite), mean=good.length?good.reduce((a,b)=>a+b,0)/good.length:NaN;
   const sd=good.length>1?Math.sqrt(good.reduce((a,b)=>a+(b-mean)**2,0)/good.length):NaN;
-  return {res:mean, err:sd, nResolved:good.length, nSplit, curve, pixNm, N, nyquist:2*pixNm};
+  return {res:mean, resErr:sd, nResolved:good.length, nSplit, curve, pixNm, N, nyquist:2*pixNm};
 }
 // Plot the FRC curve + 1/7 threshold + resolution marker on the LEFT panel.
 function drawFrcPlot(r){
@@ -3297,7 +3297,7 @@ function drawFrcPlot(r){
   ctx.fillText('spatial frequency (1/nm)', mL+pw/2, H-12);
   ctx.save(); ctx.translate(13,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText('FRC',0,0); ctx.restore();
   ctx.textAlign='left'; ctx.fillStyle='#8250df'; ctx.fillText('1/7', mL+6, Y(1/7)-8);
-  const lbl=isFinite(r.res)?`res = ${r.res.toFixed(1)}${isFinite(r.err)?' ± '+r.err.toFixed(1):''} nm`:`< Nyquist (${r.nyquist.toFixed(0)} nm)`;
+  const lbl=isFinite(r.res)?`res = ${r.res.toFixed(1)}${isFinite(r.resErr)?' ± '+r.resErr.toFixed(1):''} nm`:`< Nyquist (${r.nyquist.toFixed(0)} nm)`;
   ctx.fillStyle='#24292f'; ctx.textAlign='right'; ctx.fillText(lbl, mL+pw, mT-4);
   $('rawInfo').textContent=`— FRC · ${lbl} · scrub a frame to return`;
   syncSaveImg();
@@ -3318,7 +3318,7 @@ async function computeFRC(){
       log(r.N>=2048 ? '  The field of view is large, so FRC sampling is capped here — crop to a sub-region for a finer measurement.'
                     : '  Increase magnification and retry (finer pixels extend the frequency axis).');
       drawFrcPlot(r); return; }
-    log(`  resolution = ${r.res.toFixed(1)}${isFinite(r.err)?' ± '+r.err.toFixed(1):''} nm  (1/7 threshold · ${r.nResolved}/${r.nSplit} splits · ${r.N}² px @ ${r.pixNm.toFixed(1)} nm/px, Nyquist ${r.nyquist.toFixed(0)} nm · ${Math.round(performance.now()-t0)} ms).`);
+    log(`  resolution = ${r.res.toFixed(1)}${isFinite(r.resErr)?' ± '+r.resErr.toFixed(1):''} nm  (1/7 threshold · ${r.nResolved}/${r.nSplit} splits · ${r.N}² px @ ${r.pixNm.toFixed(1)} nm/px, Nyquist ${r.nyquist.toFixed(0)} nm · ${Math.round(performance.now()-t0)} ms).`);
     log('  FRC folds in labelling density and residual drift — expect it coarser than the NeNA precision; run after drift correction.');
     drawFrcPlot(r);
   }catch(err){ log(`⚠ FRC failed: ${err.name}: ${err.message}`); }
