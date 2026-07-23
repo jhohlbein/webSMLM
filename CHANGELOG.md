@@ -15,6 +15,7 @@ resolves to the latest.
 
 | Version | Date | Phase | DOI | Summary |
 |---|---|---|---|---|
+| 0.7.7 | 2026-07-23 | — | — | **Save image** — export either window as PNG (chooser when both have content; reconstruction & raw frame supersampled with crisp overlays; drift/calibration plots snapshotted). Scale bar added to the raw window. Pixel-size changes now live-refresh both scale bars and the nm/px readout. Log timing-breakdown column alignment fix. |
 | 0.7.6 | 2026-07-23 | — | — | Fix: "Colour by depth" toggle now appears (ticked) the moment a 3D fit method is chosen, not only after a run. README refreshed for the wavelet default and updated performance (4.89 GB 3D stack ~12 s / ~350k loc/s; browser ordering note). |
 | 0.7.5 | 2026-07-23 | — | — | Selectable detection filter: à trous B-spline **wavelet** (ThunderSTORM-style, ~2× faster band-pass) **now the default**, or DoG band-pass. `findMaxima` mean+variance fused into one pass. Re-tune **k** when switching filters (they respond differently). |
 | 0.7.4 | 2026-07-23 | — | — | UI polish: drop decorative button glyphs (self-explaining labels); disclosure "⋯" inherits text colour; Compute stat in seconds; reconstruction caption shows just nm/px; "All client-side, no upload." moved to the subtitle. |
