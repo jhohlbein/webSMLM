@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23b · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23c · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1533,7 +1533,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23b · precision (NeNA / FRC) scaffold
+</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23c · precision (NeNA / FRC) scaffold
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2391,7 +2391,7 @@ let rawFull=null;
 // the LEFT (raw) panel shows the drift curve, the RIGHT (sr) panel the
 // calibration plot. These flags say a plot is up, so "Save image" can snapshot
 // the on-screen canvas for it (and know the window has exportable content).
-let rawIsPlot=false, srIsPlot=false;
+let rawIsPlot=false, srIsPlot=false, rawPlotName='plot';   // which plot the left panel shows (drift / nena)
 const rawView={zoom:1,cx:0,cy:0};
 function fitRawZoom(){ const d=$('raw'); return rawFull?Math.min(d.width/rawFull.width,d.height/rawFull.height):1; }
 function fitRawView(){ if(!rawFull) return; rawView.zoom=fitRawZoom(); rawView.cx=rawFull.width/2; rawView.cy=rawFull.height/2; }
@@ -2537,7 +2537,7 @@ function windowContent(which){
   if(which==='sr') return srFull ? {label:'right window (reconstruction)',suffix:'_SMLM'}
                                  : (srIsPlot ? {label:'right window (calibration plot)',suffix:'_calib'} : null);
   return rawFull ? {label:'left window (raw frame)',suffix:'_rawframe'}
-                 : (rawIsPlot ? {label:'left window (drift curve)',suffix:'_drift'} : null);
+                 : (rawIsPlot ? {label:`left window (${rawPlotName} plot)`,suffix:'_'+rawPlotName} : null);
 }
 // Export a window as a PNG, exactly as shown. Image content (frame /
 // reconstruction) is re-rendered from its full-resolution *Full source at a
@@ -3045,7 +3045,7 @@ function drawDriftCurve(){
   if(!lastDrift||!lastResult) return;
   const d=lastDrift, px=lastResult.px, n=d.fdx.length;
   const cv=$('raw'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
-  rawFull=null; rawIsPlot=true; $('rawTitle').textContent='Drift vs frame';
+  rawFull=null; rawIsPlot=true; rawPlotName='drift'; $('rawTitle').textContent='Drift vs frame';
   ctx.fillStyle='#f6f8fa'; ctx.fillRect(0,0,W,H);
   const mL=60,mR=16,mT=34,mB=46, pw=W-mL-mR, ph=H-mT-mB;
   let lo=0,hi=0; for(let f=0;f<n;f++){ const a=-d.fdx[f]*px,b=-d.fdy[f]*px; lo=Math.min(lo,a,b); hi=Math.max(hi,a,b);
@@ -3131,7 +3131,7 @@ function fitRayleighScale(d,y){
     }
     if(!ok) break;
   }
-  return p[1];
+  return p;                                          // [A, b, c1, c2]
 }
 // NeNA: mean single-localization precision (nm). onProgress(0..1) optional.
 async function nenaPrecision(locs, px, onProgress){
@@ -3151,7 +3151,39 @@ async function nenaPrecision(locs, px, onProgress){
   const nb=120, binW=maxD/nb, d=new Float64Array(nb), y=new Float64Array(nb);
   for(let i=0;i<nb;i++) d[i]=(i+0.5)*binW;
   for(const v of dists){ if(v<maxD) y[(v/binW)|0]++; }
-  return {sigma:fitRayleighScale(d,y)/Math.SQRT2, nPairs:dists.length};
+  const p=fitRayleighScale(d,y);
+  return {sigma:p[1]/Math.SQRT2, nPairs:dists.length, d, y, binW, p};   // p=[A,b,c1,c2]
+}
+// Plot the NeNA nearest-neighbour histogram + fit on the LEFT (raw) panel.
+function drawNenaPlot(res){
+  const cv=$('raw'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
+  rawFull=null; rawIsPlot=true; rawPlotName='nena'; $('rawTitle').textContent='NeNA: NN distances';
+  ctx.fillStyle='#f6f8fa'; ctx.fillRect(0,0,W,H);
+  const mL=56,mR=14,mT=30,mB=44, pw=W-mL-mR, ph=H-mT-mB;
+  const {d,y,binW,p,sigma}=res, nb=d.length, xmax=d[nb-1]+binW/2;
+  const gr=(x,b)=>{const b2=b*b; return (x/b2)*Math.exp(-x*x/(2*b2));};
+  const ff=x=>p[0]*gr(x,p[1])+p[2]*x+p[3]*x*x;
+  let ymax=0; for(let i=0;i<nb;i++) if(y[i]>ymax) ymax=y[i]; ymax*=1.08;
+  const X=v=>mL+pw*v/Math.max(1e-9,xmax), Y=v=>mT+ph*(1-v/Math.max(1e-9,ymax));
+  ctx.strokeStyle='#c9d1d9'; ctx.fillStyle='#57606a'; ctx.font='11px sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const v of niceTicks(0,ymax,5)){ const yy=Y(v); ctx.beginPath(); ctx.moveTo(mL,yy); ctx.lineTo(mL+pw,yy); ctx.stroke(); ctx.fillText(v.toFixed(0),mL-6,yy); }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(const v of niceTicks(0,xmax,6)){ const xx=X(v); ctx.fillText(v.toFixed(0),xx,mT+ph+6); }
+  ctx.fillStyle='#9fb4d8';                            // histogram bars
+  for(let i=0;i<nb;i++){ const x0=X(d[i]-binW/2), x1=X(d[i]+binW/2), yy=Y(y[i]); ctx.fillRect(x0,yy,Math.max(1,x1-x0-1),(mT+ph)-yy); }
+  ctx.strokeStyle='#0a7d32'; ctx.lineWidth=1.4; ctx.setLineDash([4,3]); ctx.beginPath();   // signal Rayleigh only
+  for(let i=0;i<=240;i++){ const x=xmax*i/240, xx=X(x), yy=Y(Math.max(0,p[0]*gr(x,p[1]))); i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); } ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle='#d1242f'; ctx.lineWidth=2; ctx.beginPath();                              // full fit
+  for(let i=0;i<=240;i++){ const x=xmax*i/240, xx=X(x), yy=Y(Math.max(0,ff(x))); i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); } ctx.stroke();
+  ctx.fillStyle='#24292f'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('NN distance (nm)', mL+pw/2, H-12);
+  ctx.save(); ctx.translate(14,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText('pairs',0,0); ctx.restore();
+  ctx.textAlign='left'; ctx.fillStyle='#d1242f'; ctx.fillText('fit', mL+8, mT-4);
+  ctx.fillStyle='#0a7d32'; ctx.fillText('signal', mL+38, mT-4);
+  ctx.fillStyle='#24292f'; ctx.fillText(`σ = ${sigma.toFixed(1)} nm`, mL+pw-96, mT-4);
+  $('rawInfo').textContent=`— NeNA · ${res.nPairs.toLocaleString()} pairs · σ = ${sigma.toFixed(1)} nm · scrub a frame to return`;
+  syncSaveImg();
 }
 async function computeNeNA(){
   if(!lastResult||!lastResult.locs.length){ log('Run localisations first.'); return; }
@@ -3165,6 +3197,7 @@ async function computeNeNA(){
     if(r.err){ log('  '+r.err+'.'); return; }
     log(`  σ = ${r.sigma.toFixed(1)} nm — mean single-localization precision, from ${r.nPairs.toLocaleString()} nearest-neighbour pairs · ${Math.round(performance.now()-t0)} ms.`);
     log('  Measures precision only (Endesfelder et al., NeNA); best run after drift correction — compare with FRC resolution when available.');
+    drawNenaPlot(r);                                  // histogram + fit on the left panel
   }catch(err){ log(`⚠ NeNA failed: ${err.name}: ${err.message}`); }
   finally{ $('nenaBtn').disabled=false; }
 }
