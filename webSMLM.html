@@ -1321,7 +1321,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23d · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.0-dev · build 2026-07-23e · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1379,7 +1379,7 @@ X.B(E,Y);return E}return J}())
         <label class="row">z=0 ref frame (0=auto)
           <input type="number" id="calRef" value="0" min="0" step="1" class="num"></label>
         <div class="btnrow">
-          <button class="primary" id="calBtn">Calibrate</button>
+          <button id="calBtn">Calibrate</button>
           <button id="calSaveBtn" disabled title="Save the calibration curves as JSON">Save calib.</button>
         </div>
         <details class="info"><summary>…further info…</summary>
@@ -1396,7 +1396,7 @@ X.B(E,Y);return E}return J}())
         <label class="row" id="driftZRow" style="display:none">Correct z too (3D)
           <input type="checkbox" id="driftZ" checked></label>
         <div class="btnrow">
-          <button class="primary" id="driftBtn" disabled>Correct drift</button>
+          <button id="driftBtn" disabled>Correct drift</button>
           <button id="driftShowBtn" disabled title="Plot the estimated drift vs frame">Show drift</button>
         </div>
         <div class="bar" id="driftBar"><i id="driftProg"></i></div>
@@ -1412,7 +1412,7 @@ X.B(E,Y);return E}return J}())
         <label class="row" id="frc3dRow" style="display:none;margin-top:6px">3D shells (FSC)
           <input type="checkbox" id="frc3d"></label>
         <div class="btnrow" style="margin-top:6px">
-          <button class="primary" id="nenaBtn" disabled title="Empirical per-localization precision (nearest-neighbour)">NeNA</button>
+          <button id="nenaBtn" disabled title="Empirical per-localization precision (nearest-neighbour)">NeNA</button>
           <button id="frcBtn" disabled title="Image resolution via Fourier Ring Correlation (1/7 threshold)">FRC</button>
         </div>
         <div class="bar" id="precBar"><i id="precProg"></i></div>
@@ -1537,7 +1537,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23d · precision (NeNA / FRC) scaffold
+</span></noscript>webSMLM v0.8.0-dev · build 2026-07-23e · precision (NeNA / FRC) scaffold
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
