@@ -3265,7 +3265,16 @@ $('driftBtn').addEventListener('click',correctDrift);
 $('driftShowBtn').addEventListener('click',()=>{ if(lastDrift) drawDriftCurve(); });
 
 // Phasor 3D: reveal the Load-calibration control only for that method
-function updateMethodUI(){ $('cal3dRow').style.display = $('method').value==='phasor3d' ? 'block' : 'none'; }
+function updateMethodUI(){
+  const is3d = $('method').value==='phasor3d';
+  $('cal3dRow').style.display = is3d ? 'block' : 'none';
+  // Reveal the depth-colour toggle (ticked) the moment a 3D method is chosen —
+  // not only after a run. For a 2D method, keep it shown only if the current
+  // results still carry z, so an existing 3D reconstruction stays colourable.
+  if(is3d){ $('zcolorRow').style.display='flex'; $('zcolor').checked=true; }
+  else { const has3d = lastResult && lastResult.locs.some(L=>isFinite(L.z));
+         $('zcolorRow').style.display = has3d ? 'flex' : 'none'; }
+}
 $('method').addEventListener('change',updateMethodUI); updateMethodUI();
 
 // Keep the in-column line short and fixed-height so the sidebar never reflows;
