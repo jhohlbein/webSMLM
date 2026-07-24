@@ -1282,6 +1282,7 @@ X.B(E,Y);return E}return J}())
   a{color:var(--accent)}
   .helpbtn{background:#21262d;border:1px solid var(--accent);color:var(--accent);font-weight:600;margin-bottom:14px}
   .linetool{width:auto;padding:2px 6px;margin:0;background:#21262d;border:1px solid var(--line);border-radius:5px;color:var(--muted);line-height:0;cursor:pointer}
+  .logbtn{width:auto;padding:2px 8px;margin:0;font-size:11px;font-weight:400;background:#21262d;border:1px solid var(--line);border-radius:5px;color:var(--muted);cursor:pointer}
   .linetool.on{border-color:var(--accent);color:var(--accent);background:#1b2430}
   .modal-bg{position:fixed;inset:0;background:rgba(1,4,9,.72);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
   .modal-bg.open{display:flex}
@@ -1323,7 +1324,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.1-dev · build 2026-07-24h · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.1 · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1540,9 +1541,9 @@ X.B(E,Y);return E}return J}())
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h4>Log</h4>
+      <h4><span>Log</span><span style="display:flex;gap:6px"><button id="clearLogBtn" class="logbtn" title="Clear the log window">Clear log</button><button id="exportLogBtn" class="logbtn" title="Save the log window as a text file">Export log</button></span></h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.1-dev · build 2026-07-24h
+</span></noscript>webSMLM v0.8.1 · precision, line profiles, plot polish
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -3795,6 +3796,14 @@ $('calFile').addEventListener('change',async e=>{
 });
 $('saveBtn').addEventListener('click',exportCSV);
 $('saveImgBtn').addEventListener('click',saveImageClicked);
+$('clearLogBtn').addEventListener('click',()=>{ $('log').textContent=''; });
+$('exportLogBtn').addEventListener('click',async()=>{
+  const txt=$('log').textContent.replace(/^\n+/,'');
+  if(!txt){ log('Log is empty.'); return; }
+  const name=(stackName||'webSMLM').replace(/\.(ome\.)?tiff?$/i,'').replace(/\.[^.]*$/,'')+'_log.txt';
+  const saved=await saveBlob(new Blob([txt+'\n'],{type:'text/plain;charset=utf-8'}), name, 'Log (text)', 'text/plain', '.txt');
+  if(saved) log(`Exported log as ${saved}.`);
+});
 $('stopBtn').addEventListener('click',()=>{
   if($('stopBtn').disabled) return;
   stopRequested=true; $('stopBtn').disabled=true; log('Stopping…');

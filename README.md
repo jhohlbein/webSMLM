@@ -63,6 +63,9 @@ walk-through of every step.
 - **Navigate both panels**: independent zoom/pan (wheel or pinch, drag,
   double-click to reset) on the raw frame and the reconstruction, plus a frame
   slider to scrub the stack.
+- **Measures distances / line profiles**: click two points in the reconstruction
+  to plot the intensity profile along the line (averaged over a 3-pixel band),
+  with the length in nm and an x-zoomable/pannable plot.
 - **Save/Load settings** as JSON to reproduce an analysis configuration.
 - **Works on small screens**: single-column layout on phones and tablets, with
   drag/pinch-to-zoom navigation of the reconstruction (plus a scale bar).
