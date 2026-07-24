@@ -1323,7 +1323,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.1-dev · build 2026-07-24e · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.1-dev · build 2026-07-24f · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1542,7 +1542,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.1-dev · build 2026-07-24e
+</span></noscript>webSMLM v0.8.1-dev · build 2026-07-24f
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2407,17 +2407,19 @@ function renderProfile(){
   $('rawInfo').textContent=`— line profile · length ${totalNm.toFixed(0)} nm${zoomed?` · x ${x0.toFixed(0)}–${x1.toFixed(0)} nm (scroll/pinch zoom · drag pan · dbl-click reset)`:` · scroll/pinch to zoom x`} · scrub a frame to return`;
   syncSaveImg();
 }
-// vertical depth colourbar (top-left), mapping the current LUT to the z range
+// vertical depth colourbar (top-left), mapping the current LUT to the z range.
+// Ticks + labels at the max (+), zero and min positions.
 function drawDepthBar(ctx,DW,DH,zlo,zhi){
   const lut=getLUT($('lut').value), x=16, y=16, bw=12, bh=140;
   for(let i=0;i<bh;i++){ const t=1-i/(bh-1), j=(t*255)|0;
     ctx.fillStyle=`rgb(${lut[j*3]},${lut[j*3+1]},${lut[j*3+2]})`; ctx.fillRect(x,y+i,bw,1); }
-  ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.strokeRect(x-.5,y-.5,bw+1,bh+1);
-  ctx.fillStyle='#fff'; ctx.font='11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`${zhi.toFixed(0)} nm`, x+bw+5, y+5);
-  ctx.fillText(`${zlo.toFixed(0)} nm`, x+bw+5, y+bh-5);
-  ctx.save(); ctx.translate(x-4,y+bh/2); ctx.rotate(-Math.PI/2);
-  ctx.textAlign='center'; ctx.fillText('z (depth)',0,0); ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.strokeRect(x-.5,y-.5,bw+1,bh+1);
+  const span=Math.max(1e-9, zhi-zlo), yOf=v=>y+bh*(zhi-v)/span, fmt=v=>(v>0?'+':'')+v.toFixed(0)+' nm';
+  ctx.fillStyle='#fff'; ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.font='11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(const v of [zhi, 0, zlo]){ if(v>zhi+1e-6||v<zlo-1e-6) continue;   // skip 0 if outside the range
+    const yy=Math.max(y,Math.min(y+bh,yOf(v)));
+    ctx.beginPath(); ctx.moveTo(x+bw, yy); ctx.lineTo(x+bw+4, yy); ctx.stroke();   // tick on the bar
+    ctx.fillText(fmt(v), x+bw+7, yy); }
 }
 // nmPerDisp = physical nanometres per displayed pixel; caller supplies it so the
 // same bar serves the reconstruction (px/mag/zoom) and the raw frame (px/zoom).
@@ -3737,7 +3739,9 @@ function updateMethodUI(){
   // Reveal the depth-colour toggle (ticked) the moment a 3D method is chosen —
   // not only after a run. For a 2D method, keep it shown only if the current
   // results still carry z, so an existing 3D reconstruction stays colourable.
-  if(is3d){ $('zcolorRow').style.display='flex'; $('zcolor').checked=true; }
+  if(is3d){ $('zcolorRow').style.display='flex'; $('zcolor').checked=true;
+    $('lut').value='turbo';                          // depth-friendly diverging map
+    if(srFull) rerender(true); }
   else { const has3d = lastResult && lastResult.locs.some(L=>isFinite(L.z));
          $('zcolorRow').style.display = has3d ? 'flex' : 'none'; }
 }
