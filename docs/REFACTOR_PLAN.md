@@ -35,6 +35,7 @@ their historical "Phase N" headings as a record; new work is version-keyed.
 | v0.7.1–0.7.7 | JS-disabled warning; wavelet detection filter (default); UI polish; PNG image export + raw scale bar |
 | v0.8.0 | Localization precision — **NeNA** + **FRC** (2D), experimental |
 | v0.8.1 | NeNA → full Endesfelder fit; line-profile / distance tool; depth-bar ticks + Turbo-on-3D; Clear/Export log; plot-label polish |
+| v0.8.2 | Cursor readouts (crosshair + data-space x/y) on all axis plots — profile, NeNA, FRC, drift, calibration |
 
 **Next:**
 

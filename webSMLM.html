@@ -1324,7 +1324,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.1 · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.2 · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1543,7 +1543,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4><span>Log</span><span style="display:flex;gap:6px"><button id="clearLogBtn" class="logbtn" title="Clear the log window">Clear log</button><button id="exportLogBtn" class="logbtn" title="Save the log window as a text file">Export log</button></span></h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.1 · precision, line profiles, plot polish
+</span></noscript>webSMLM v0.8.2 · plot cursor readouts
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2317,6 +2317,7 @@ function clampView(){
 function syncSaveImg(){ const b=$('saveImgBtn'); if(b) b.disabled = !(srFull||srIsPlot||rawFull||rawIsPlot); }
 function drawView(){
   const d=$('sr'), ctx=d.getContext('2d'), DW=d.width, DH=d.height;
+  _plotHover.sr=null;                 // reconstruction now owns this panel — no plot readout
   ctx.fillStyle='#000'; ctx.fillRect(0,0,DW,DH);
   syncSaveImg();
   if(!srFull) return;
@@ -2408,6 +2409,8 @@ function renderProfile(){
   ctx.textAlign='right'; ctx.textBaseline='alphabetic'; ctx.fillText(`length = ${totalNm.toFixed(0)} nm`, mL+pw, mT-4);
   const zoomed=x0>0.5||x1<totalNm-0.5;
   $('rawInfo').textContent=`— line profile · length ${totalNm.toFixed(0)} nm${zoomed?` · x ${x0.toFixed(0)}–${x1.toFixed(0)} nm (scroll/pinch zoom · drag pan · dbl-click reset)`:` · scroll/pinch to zoom x`} · scrub a frame to return`;
+  registerPlotHover('raw',{mL,mT,pw,ph,xA:x0,xB:x1,yTop:ymax,yBot:0,
+    fmt:(vx,vy)=>`${vx.toFixed(0)} nm · ${vy.toFixed(0)} a.u.`});
   syncSaveImg();
 }
 // vertical depth colourbar (top-left), mapping the current LUT to the z range.
@@ -2502,6 +2505,7 @@ function clampRawView(){ if(!rawFull) return;
 let rawSpots=null, rawLocs=null;                 // overlays for the current frame (native coords)
 function drawRawView(){
   const d=$('raw'), ctx=d.getContext('2d'), DW=d.width, DH=d.height;
+  _plotHover.raw=null;                // a frame now owns the left panel — no plot readout
   ctx.fillStyle='#000'; ctx.fillRect(0,0,DW,DH);
   if(rawFull){
     ctx.imageSmoothingEnabled=false;
@@ -2932,6 +2936,8 @@ function drawCalibration(){
   ctx.fillStyle='#000';ctx.fillText('— fit', mL+pw-30, 20);
   $('srTitle').textContent='3D calibration';
   $('srInfo').textContent=`${calib.pts.length} points · z-step ${calib.step} nm · scroll the raw panel to inspect frames`;
+  registerPlotHover('sr',{mL,mT,pw,ph,xA:zmin,xB:zmax,yTop:smax,yBot:smin,
+    fmt:(vx,vy)=>`z ${vx.toFixed(0)} nm · σ ${vy.toFixed(1)} nm`});
 }
 // simple "nice" axis ticks
 function niceTicks(lo,hi,n){
@@ -3168,6 +3174,8 @@ function drawDriftCurve(){
   ctx.fillStyle='#c81cc8'; ctx.fillText('drift y', mL+pw-40, mT-6);
   if(d.fdz){ ctx.fillStyle='#3572b0'; ctx.fillText('drift z', mL+pw-140, mT-6); }
   $('rawInfo').textContent=`— estimated drift · ${d.nSeg} segments · scrub a frame to return to the raw view`;
+  registerPlotHover('raw',{mL,mT,pw,ph,xA:0,xB:n-1,yTop:hi,yBot:lo,
+    fmt:(vx,vy)=>`frame ${vx.toFixed(0)} · ${vy.toFixed(1)} nm`});
   syncSaveImg();
 }
 
@@ -3301,6 +3309,8 @@ function drawNenaPlot(res){
   const serr=isFinite(res.sigErr)?' ± '+res.sigErr.toFixed(1):'';
   ctx.fillStyle='#24292f'; ctx.fillText(`σ = ${sigma.toFixed(1)}${serr} nm`, mL+pw-118, mT-4);
   $('rawInfo').textContent=`— NeNA · ${res.nPairs.toLocaleString()} pairs · σ = ${sigma.toFixed(1)}${serr} nm · scrub a frame to return`;
+  registerPlotHover('raw',{mL,mT,pw,ph,xA:0,xB:xmax,yTop:ymax,yBot:0,
+    fmt:(vx,vy)=>`${vx.toFixed(1)} nm · ${vy.toFixed(0)} pairs`});
   syncSaveImg();
 }
 async function computeNeNA(){
@@ -3407,6 +3417,8 @@ function drawFrcPlot(r){
   const lbl=isFinite(r.res)?`res = ${r.res.toFixed(1)}${isFinite(r.resErr)?' ± '+r.resErr.toFixed(1):''} nm`:`< Nyquist (${r.nyquist.toFixed(0)} nm)`;
   ctx.fillStyle='#24292f'; ctx.textAlign='right'; ctx.textBaseline='alphabetic'; ctx.fillText(lbl, mL+pw, mT-4);
   $('rawInfo').textContent=`— FRC · ${lbl} · scrub a frame to return`;
+  registerPlotHover('raw',{mL,mT,pw,ph,xA:0,xB:fmax,yTop:hi,yBot:lo,
+    fmt:(vx,vy)=>`${vx.toFixed(4)} 1/nm${vx>0?' ('+(1/vx).toFixed(0)+' nm)':''} · FRC ${vy.toFixed(2)}`});
   syncSaveImg();
 }
 async function computeFRC(){
@@ -3913,6 +3925,52 @@ $('sr').addEventListener('click',e=>{
   cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end);
   cv.addEventListener('dblclick',()=>{ if(!active()) return; profileView={x0:0,x1:profileData.totalNm}; renderProfile(); });
 })();
+
+/* ---- plot cursor readout: crosshair + x/y value under the pointer ------------
+   Every axis plot (profile, NeNA, FRC, drift, calibration) registers its axis
+   mapping plus a snapshot of the freshly-drawn canvas. One shared mousemove
+   restores that snapshot and overlays a crosshair + a readout of the data-space
+   x/y under the cursor — so hovering never re-runs the (sometimes heavy) render.
+   The snapshot is cleared whenever the panel switches to a frame / reconstruction
+   (drawRawView / drawView) so a stale plot can't paint over live pixels. ------- */
+const _plotHover={raw:null,sr:null};
+function registerPlotHover(id,m){          // m={mL,mT,pw,ph,xA,xB,yTop,yBot,fmt}
+  const cv=$(id); let snap=_plotHover[id]&&_plotHover[id].snap;
+  if(!snap) snap=document.createElement('canvas');
+  snap.width=cv.width; snap.height=cv.height;
+  snap.getContext('2d').drawImage(cv,0,0);
+  _plotHover[id]={...m,snap};
+}
+function drawPlotHover(id,clientX,clientY){
+  const h=_plotHover[id]; if(!h) return;
+  const cv=$(id), ctx=cv.getContext('2d');
+  ctx.drawImage(h.snap,0,0);                             // restore the clean plot
+  if(clientX==null) return;                              // pointer left → clean plot only
+  const r=cv.getBoundingClientRect();
+  const px=(clientX-r.left)*cv.width/r.width, py=(clientY-r.top)*cv.height/r.height;
+  if(px<h.mL||px>h.mL+h.pw||py<h.mT||py>h.mT+h.ph) return;   // outside the plotted axes
+  const dx=h.xA+(px-h.mL)/h.pw*(h.xB-h.xA);
+  const dy=h.yTop+(py-h.mT)/h.ph*(h.yBot-h.yTop);
+  ctx.save();
+  ctx.strokeStyle='rgba(139,148,158,.75)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(px,h.mT); ctx.lineTo(px,h.mT+h.ph);
+  ctx.moveTo(h.mL,py); ctx.lineTo(h.mL+h.pw,py); ctx.stroke(); ctx.setLineDash([]);
+  const txt=h.fmt(dx,dy);
+  ctx.font='11px ui-monospace,SFMono-Regular,Menlo,monospace';
+  const tw=ctx.measureText(txt).width;
+  let bx=px+9, by=py-9;
+  if(bx+tw+8>cv.width) bx=px-tw-17;                      // flip left near the right edge
+  if(by-13<h.mT) by=py+25;                               // flip below near the top edge
+  ctx.fillStyle='rgba(13,17,23,.9)'; ctx.fillRect(bx-4,by-13,tw+8,17);
+  ctx.strokeStyle='rgba(139,148,158,.5)'; ctx.strokeRect(bx-4.5,by-13.5,tw+9,18);
+  ctx.fillStyle='#e6edf3'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(txt,bx,by-4);
+  ctx.restore();
+}
+for(const _id of ['raw','sr']){ const _cv=$(_id);
+  _cv.addEventListener('mousemove',e=>{ if(_plotHover[_id]) drawPlotHover(_id,e.clientX,e.clientY); });
+  _cv.addEventListener('mouseleave',()=>{ if(_plotHover[_id]) drawPlotHover(_id,null,null); });
+}
 
 // help modal — wire after full DOM parse (the modal markup follows this script,
 // so its elements don't exist yet at first execution).
