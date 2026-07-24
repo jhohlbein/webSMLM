@@ -1323,7 +1323,7 @@ X.B(E,Y);return E}return J}())
   </div>
 </noscript>
 <header>
-  <h1>webSMLM <span class="pill">v0.8.1-dev · build 2026-07-24g · proof-of-concept</span></h1>
+  <h1>webSMLM <span class="pill">v0.8.1-dev · build 2026-07-24h · proof-of-concept</span></h1>
   <p style="font-size:12px;margin-top:4px">© 2026 Johannes Hohlbein · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · <a href="https://github.com/HohlbeinLab/webSMLM" target="_blank" rel="noopener">GitHub</a> · All client-side, no upload.</p>
 </header>
 
@@ -1542,7 +1542,7 @@ X.B(E,Y);return E}return J}())
     <div class="card" style="margin-top:16px">
       <h4>Log</h4>
       <div class="log" id="log"><noscript><span style="color:#ff9b9b">⚠ JavaScript appears to be disabled — webSMLM cannot run. Please enable it and reload.
-</span></noscript>webSMLM v0.8.1-dev · build 2026-07-24g
+</span></noscript>webSMLM v0.8.1-dev · build 2026-07-24h
 Ready. Click “Load movie” or “Simulate movie”, then “Run localisations”.</div>
     </div>
   </main>
@@ -2333,12 +2333,14 @@ function drawMeasureOverlay(ctx,DW,DH){
     const a=toD(measureLine.x0,measureLine.y0), b=toD(measureLine.x1,measureLine.y1);
     const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1, th=3*view.zoom;   // 3 srFull px band
     const px=-dy/len*th/2, py=dx/len*th/2;
-    ctx.fillStyle='rgba(255,210,26,.16)'; ctx.beginPath();
+    ctx.fillStyle='rgba(255,59,255,.12)'; ctx.beginPath();                    // faint band fill
     ctx.moveTo(a.x+px,a.y+py); ctx.lineTo(b.x+px,b.y+py); ctx.lineTo(b.x-px,b.y-py); ctx.lineTo(a.x-px,a.y-py); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle='#ffd21a'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-    ctx.fillStyle='#ffd21a'; for(const p of [a,b]){ ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.fill(); }
+    ctx.strokeStyle='rgba(255,59,255,.6)'; ctx.lineWidth=1; ctx.beginPath();  // 3× band edges (more visible)
+    ctx.moveTo(a.x+px,a.y+py); ctx.lineTo(b.x+px,b.y+py); ctx.moveTo(a.x-px,a.y-py); ctx.lineTo(b.x-px,b.y-py); ctx.stroke();
+    ctx.strokeStyle='#ff3bff'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();  // centre line
+    ctx.fillStyle='#ff3bff'; for(const p of [a,b]){ ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.fill(); }
   }
-  if(measurePt0){ const a=toD(measurePt0.x,measurePt0.y); ctx.fillStyle='#ffd21a'; ctx.beginPath(); ctx.arc(a.x,a.y,3.5,0,7); ctx.fill(); }
+  if(measurePt0){ const a=toD(measurePt0.x,measurePt0.y); ctx.fillStyle='#ff3bff'; ctx.beginPath(); ctx.arc(a.x,a.y,3.5,0,7); ctx.fill(); }
 }
 // Intensity profile along measureLine (srFull coords), averaged over a 3-px-wide
 // band, plotted in the LEFT panel; x = distance (nm), y = reconstruction intensity.
@@ -3158,10 +3160,10 @@ function drawDriftCurve(){
     for(let f=0;f<n;f++){ const x=X(f),y=Y(get(f)); f?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); };
   line(f=>-d.fdx[f]*px,'#0a7d32'); line(f=>-d.fdy[f]*px,'#c81cc8');
   if(d.fdz) line(f=>-d.fdz[f],'#3572b0');   // z drift is already in nm
-  ctx.fillStyle='#24292f'; ctx.font='12px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('frame', mL+pw/2, H-12);
-  ctx.save(); ctx.translate(15,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText('drift (nm)',0,0); ctx.restore();
-  ctx.textAlign='left'; ctx.fillStyle='#0a7d32'; ctx.fillText('drift x', mL+pw-90, mT-6);
+  ctx.fillStyle='#24292f'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('frame', mL+pw/2, mT+ph+28);
+  ctx.save(); ctx.translate(14,mT+ph/2); ctx.rotate(-Math.PI/2); ctx.textBaseline='middle'; ctx.fillText('drift (nm)',0,0); ctx.restore();
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.fillStyle='#0a7d32'; ctx.fillText('drift x', mL+pw-90, mT-6);
   ctx.fillStyle='#c81cc8'; ctx.fillText('drift y', mL+pw-40, mT-6);
   if(d.fdz){ ctx.fillStyle='#3572b0'; ctx.fillText('drift z', mL+pw-140, mT-6); }
   $('rawInfo').textContent=`— estimated drift · ${d.nSeg} segments · scrub a frame to return to the raw view`;
